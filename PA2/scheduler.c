@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <unistd.h>
+#include <sys/types.h>
 /* Your `schedule` program should fork a series of child processes,
 a child process for each process defined in an input file, adding
 them into a priority queue.
@@ -32,8 +33,30 @@ int main(int argc, char * argv[]){
     values indicating higher priority.
     - a process binary file
     - and optional parameters for the binary file*/
+    char *buf = NULL;
+    size_t len = 0;
+	ssize_t read;
 
-    fclose(fp);
+	while((read = getline(&buf, &len, fp)) != -1){
+		int pid = atoi(buf[0]);
+		int ppriority = atoi(buf[1]);	
+		char *filename = buf[2]; //binary file
+		char *params = buf[3]; //TODO: fix this param later						  	
+	}	
+
+
+	// for loop, fork depending on line, go back to it or smth
+	pid_t pid = fork();
+	if(pid < 0){
+		printf("fork failed");
+		exit(1);
+	} else if (pid == 0){
+		
+	}
+
+	free(line);	
+	fclose(fp);
+    return 0;
 
 
 
