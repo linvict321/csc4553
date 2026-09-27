@@ -1,6 +1,7 @@
 #ifndef QUEUE_H
 #include <stdio.h>
 #include <stdlib.h>
+#define MAX 100
 
 typdef struct{
     int items[MAX];
@@ -12,7 +13,7 @@ typedef struct{
     int priority;
     char *filename;
     char *params1; //input chars
-    int params2; //#of times to run it
+    int bursttime; //#of times to run it
 }Process;
 
 void swap(int* a, int*b);

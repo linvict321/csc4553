@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include "queue.h"
+#include <signal.h>
+#include <sys/time.h>
 /* Your `schedule` program should fork a series of child processes,
 a child process for each process defined in an input file, adding
 them into a priority queue.
@@ -11,6 +13,10 @@ to completion.
 Processes with the same priority should circulate, and run in
 time quantum intervals using Round Robin. When a process
 concludes, it should be taken out of circulation. */
+
+// void timer_callback(int signum){
+//     printf("timer done");
+// }
 
 int main(int argc, char * argv[]){
 
@@ -39,32 +45,56 @@ int main(int argc, char * argv[]){
 	ssize_t read;
     struct PriorityQueue queue1;
 
-
 	while((read = getline(&buf, &len, fp)) != -1){
+
+        /*Your `schedule` program should fork a series of child processes,
+        a child process for each process defined in an input file, adding
+        them into a priority queue.*/
+    
         struct Process p1;
-		p1.pid = atoi(buf[0]);
-		p1.priority = atoi(buf[1]);	
-		p1.filename = buf[2]; //binary file
+        p1.pid = atoi(buf[0]);
+        p1.priority = atoi(buf[1]);	
+        p1.filename = buf[2]; //binary file, have to exec it
         if(len == 3){
-            p1.params2 = atoi(buf[3]);
+            p1.bursttime = atoi(buf[3]);
+            p1.params1 = NULL;
         } else if(len > 3){
-    		p1.params1 = buf[3]; //TODO: fix this param later	 
-            p1.params2 = atoi(buf[3]);           
+            p1.params1 = buf[3]; // this param goes w/ program
+            p1.bursttime = atoi(buf[3]);           
         }
         //add to pq
         enqueue(queue1, p1);					  	
 	}	
 
-	// for loop, fork depending on line, go back to it or smth
-	pid_t pid = fork();
-	if(pid < 0){
-		printf("fork failed");
-		exit(1);
-	} else if (pid == 0){
-		
-	}
-
 	free(line);	
+
+    /*Processes with the same priority should circulate, 
+    and run in time quantum intervals using Round Robin*/
+
+    curr = dequeue(queue1);
+    while curr{
+        pid_t pid = fork();
+        if(pid < 0){
+            perror("fork failed");
+            return -1;
+        }else if (pid == 0){
+            //run it for time quantum using setittimer()
+            if(curr.params1 == NULL){
+                char *args = {curr.filename, NULL};            
+            } else if(curr.params1 != NULL){
+                char *args = {curr.filename, curr.params1, NULL};
+            }
+            execvp(args[0], args);
+            //TODO: timer here
+            //TODO: if over time quantum, then enqueue again
+            
+            perror("execvp failed");
+            return -1; 
+        }else{
+            wait(NULL);
+        }
+    }
+    
 	fclose(fp);
     return 0;
 

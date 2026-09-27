@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "queue.h"
-#define MAX 100
 
 void swap(int* a, int*b){
     int temp = *a;
