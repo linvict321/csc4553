@@ -17,11 +17,8 @@ scheduler that uses **Priority Scheduling with Round-Robin**.
 Your `schedule` program should fork a series of child processes,
 a child process for each process defined in an input file, adding
 them into a priority queue.
-A process with a higher priority (lower number) should be running
-to completion.
-Processes with the same priority should circulate, and run in
-time quantum intervals using Round Robin. When a process
-concludes, it should be taken out of circulation.
+A process with a higher priority (lower number) should be running to completion.
+Processes with the same priority should circulate, and run in time quantum intervals using Round Robin. When a process concludes, it should be taken out of circulation.
 ## 1.1 Input
 Your scheduler program should expect two parameters:
 - A time quantum in milliseconds

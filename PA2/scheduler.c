@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include "queue.h"
 /* Your `schedule` program should fork a series of child processes,
 a child process for each process defined in an input file, adding
 them into a priority queue.
@@ -36,14 +37,23 @@ int main(int argc, char * argv[]){
     char *buf = NULL;
     size_t len = 0;
 	ssize_t read;
+    struct PriorityQueue queue1;
+
 
 	while((read = getline(&buf, &len, fp)) != -1){
-		int pid = atoi(buf[0]);
-		int ppriority = atoi(buf[1]);	
-		char *filename = buf[2]; //binary file
-		char *params = buf[3]; //TODO: fix this param later						  	
+        struct Process p1;
+		p1.pid = atoi(buf[0]);
+		p1.priority = atoi(buf[1]);	
+		p1.filename = buf[2]; //binary file
+        if(len == 3){
+            p1.params2 = atoi(buf[3]);
+        } else if(len > 3){
+    		p1.params1 = buf[3]; //TODO: fix this param later	 
+            p1.params2 = atoi(buf[3]);           
+        }
+        //add to pq
+        enqueue(queue1, p1);					  	
 	}	
-
 
 	// for loop, fork depending on line, go back to it or smth
 	pid_t pid = fork();
@@ -57,7 +67,5 @@ int main(int argc, char * argv[]){
 	free(line);	
 	fclose(fp);
     return 0;
-
-
 
 }
