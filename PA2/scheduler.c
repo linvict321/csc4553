@@ -23,7 +23,7 @@ int main(int argc, char * argv[]){
 /* 2 params */
     //1st param = time quant
     int time_quant = atoi(argv[1]);
-    if(time_quant == NULL){
+    if(!time_quant){
         printf("Invalid time\n");
         exit(1);
     }

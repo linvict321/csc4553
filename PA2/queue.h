@@ -1,9 +1,10 @@
 #ifndef QUEUE_H
+#define QUEUE_H
 #include <stdio.h>
 #include <stdlib.h>
 #define MAX 100
 
-typdef struct{
+typedef struct{
     int items[MAX];
     int size;
 }PriorityQueue;
