@@ -43,33 +43,33 @@ int main(int argc, char * argv[]){
     char *buf = NULL;
     size_t len = 0;
 	ssize_t read;
-    struct PriorityQueue queue1;
+    PriorityQueue queue1;
 
 	while((read = getline(&buf, &len, fp)) != -1){
         
         //TODO: error handling
-        struct Process p1;
-        p1.pid = atoi(buf[0]);
-        p1.priority = atoi(buf[1]);	
+        Process p1;
+        p1.pid = buf[0] - '\0';
+        p1.priority = buf[1] - '\0';	
         p1.filename = buf[2]; //binary file, have to exec it
         if(len == 3){
-            p1.bursttime = atoi(buf[3]);
+            p1.bursttime = buf[3] - '\0';
             p1.params1 = NULL;
         } else if(len > 3){
             p1.params1 = buf[3]; // this param goes w/ program
-            p1.bursttime = atoi(buf[3]);           
+            p1.bursttime = buf[3] - '\0';           
         }
         //add to pq
-        enqueue(queue1, p1);					  	
+        enqueue(queue1, p1.priority, p1);					  	
 	}	
 
-	free(line);	
+	free(buf);	
 
     /*Processes with the same priority should circulate, 
     and run in time quantum intervals using Round Robin*/
 
-    curr = dequeue(queue1);
-    while curr{
+    Process curr = dequeue(queue1);
+    while (curr){
         pid_t pid = fork();
         if(pid < 0){
             perror("fork failed");
