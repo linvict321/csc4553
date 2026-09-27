@@ -46,11 +46,8 @@ int main(int argc, char * argv[]){
     struct PriorityQueue queue1;
 
 	while((read = getline(&buf, &len, fp)) != -1){
-
-        /*Your `schedule` program should fork a series of child processes,
-        a child process for each process defined in an input file, adding
-        them into a priority queue.*/
-    
+        
+        //TODO: error handling
         struct Process p1;
         p1.pid = atoi(buf[0]);
         p1.priority = atoi(buf[1]);	
