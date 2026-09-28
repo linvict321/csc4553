@@ -90,8 +90,8 @@ int main(int argc, char * argv[]){
     /*Processes with the same priority should circulate, 
     and run in time quantum intervals using Round Robin*/
 
-    Process *curr = dequeue(&queue1);
-    while (curr){
+    Process curr = dequeue(&queue1);
+    while (peek(&queue1) != -1){
         pid_t pid = fork();
         if(pid < 0){
             perror("fork failed");
@@ -116,8 +116,7 @@ int main(int argc, char * argv[]){
         } else{
             wait(NULL);
         }
-        free(curr);
-        curr = dequeue(&queue1);
+        
     }
     
 	fclose(fp);

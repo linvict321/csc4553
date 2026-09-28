@@ -42,7 +42,7 @@ int heapifyDown(PriorityQueue *pq, int index){
         heapifyDown(pq, smallest);
     }
 }
-int dequeue(PriorityQueue *pq){
+Process dequeue(PriorityQueue *pq){
     if (!pq->size) {
         printf("Priority queue is empty\n");
         return -1;
