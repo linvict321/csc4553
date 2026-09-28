@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include "queue.h"
 
-void swap(int* a, int*b){
-    int temp = *a;
+void swap(Node* a, Node*b){
+    Node temp = *a;
     *a = *b;
     *b = temp;
 }
@@ -43,6 +43,7 @@ void heapifyDown(PriorityQueue *pq, int index){
         swap(&pq->items[index], &pq->items[smallest]);
         heapifyDown(pq, smallest);
     }
+
 }
 Process dequeue(PriorityQueue *pq){
     if (!pq->size) {

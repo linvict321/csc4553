@@ -55,30 +55,34 @@ int main(int argc, char * argv[]){
 
 	while((read = getline(&buf, &len, fp)) != -1){
         
+	Process p1;
         char *token = strtok(buf, " \t\n");
-        //TODO: error handling
-        Process p1;
-
-        token = strtok(NULL, " \n");
+        int numT = 0;  
+        
+	//TODO: set inplace real error checking
         if(token != NULL)
             p1.pid = atoi(token);
-        token = strtok(NULL, " \n");
+	numT++;
+        token = strtok(NULL, " \t\n");
         if(token != NULL)   
             p1.priority = atoi(token);
-        token = strtok(NULL, " \n");
+        numT++;
+	token = strtok(NULL, " \t\n");
         if(token != NULL)	
-            p1.filename = strdup(token); //binary file, have to exec it
+	    p1.filename = strdup(token); //binary file, have to exec it
+	numT++;
+	//printf("%s\n", p1.filename);				 
         if(len == 3){
-            token = strtok(NULL, " \n");
+            token = strtok(NULL, " \t\n");
             if(token != NULL){
                 p1.bursttime = atoi(token);
                 p1.params1 = NULL;
             }
         } else if(len > 3){
-            token = strtok(NULL, " \n");
+            token = strtok(NULL, " \t\n");
             if(token != NULL)
                 p1.params1 = strdup(token); // this param goes w/ program
-            token = strtok(NULL, " \n");
+            token = strtok(NULL, " \t\n");
             if(token != NULL)
                 p1.bursttime = atoi(token);           
         }
@@ -99,7 +103,10 @@ int main(int argc, char * argv[]){
             return -1;
         } else if (pid == 0){
             //run it for time quantum using setittimer()
-            char *args[3] =  {curr.filename, curr.params1, NULL};
+            char path[128];
+	    snprintf(path, sizeof(path), "./%s", curr.filename);
+	    char *args[3] =  {path, curr.params1, NULL};
+	    printf("%s %s\n", curr.filename, curr.params1);
             execvp(args[0], args);
             //TODO: timer here
             //TODO: if over time quantum, then enqueue again
