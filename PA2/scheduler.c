@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <string.h>
+#include <sys/wait.h>
 
 /* Your `schedule` program should fork a series of child processes,
 a child process for each process defined in an input file, adding
@@ -22,6 +23,10 @@ concludes, it should be taken out of circulation. */
 
 int main(int argc, char * argv[]){
 
+    if(argc != 3){
+        printf("not enough params");
+        exit(1);
+    }
 /* 2 params */
     //1st param = time quant
     int time_quant = atoi(argv[1]);
@@ -64,13 +69,14 @@ int main(int argc, char * argv[]){
             p1.filename = token; //binary file, have to exec it
         if(len == 3){
             token = strtok(NULL, " \n");
-            if(token != NULL)
+            if(token != NULL){
                 p1.bursttime = atoi(token);
                 p1.params1 = NULL;
+            }
         } else if(len > 3){
             token = strtok(NULL, " \n");
             if(token != NULL)
-                p1.params1 = atoi(token); // this param goes w/ program
+                p1.params1 = token; // this param goes w/ program
             token = strtok(NULL, " \n");
             if(token != NULL)
                 p1.bursttime = atoi(token);           
@@ -84,19 +90,22 @@ int main(int argc, char * argv[]){
     /*Processes with the same priority should circulate, 
     and run in time quantum intervals using Round Robin*/
 
-    Process curr = dequeue(queue1);
+    Process curr = dequeue(&queue1);
     while (curr){
         pid_t pid = fork();
         if(pid < 0){
             perror("fork failed");
             return -1;
-        }else if (pid == 0){
+        } else if (pid == 0){
             //run it for time quantum using setittimer()
-            char *args = {}
+            char *args[4];
             if(curr.params1 == NULL){
-                args = {curr.filename, NULL};            
+                args[0] = curr.filename;
+                args[1] = NULL;            
             } else if(curr.params1 != NULL){
-                args = {curr.filename, curr.params1, NULL};
+                args[0] = curr.filename;
+                args[1] = curr.params1;
+                args[2] = NULL;
             }
             execvp(args[0], args);
             //TODO: timer here
@@ -104,7 +113,7 @@ int main(int argc, char * argv[]){
             
             perror("execvp failed");
             return -1; 
-        }else{
+        } else{
             wait(NULL);
         }
     }
