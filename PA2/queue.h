@@ -21,7 +21,7 @@ void swap(int* a, int*b);
 void heapifyUp(PriorityQueue *pg, int index);
 void enqueue(PriorityQueue *pq, int value, Process p1);
 int heapifyDown(PriorityQueue *pq, int index);
-int dequeue(PriorityQueue *pq);
+Process dequeue(PriorityQueue *pq);
 int peek(PriorityQueue *pq);
 
 #endif
