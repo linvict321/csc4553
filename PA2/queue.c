@@ -48,7 +48,7 @@ int dequeue(PriorityQueue *pq){
         return -1;
     }
 
-    int item = pq->items[0];
+    Process item = pq->items[0];
     pq->items[0] = pq->items[--pq->size];
     heapifyDown(pq, 0);
     return item;
