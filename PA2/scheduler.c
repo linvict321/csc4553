@@ -51,10 +51,11 @@ int main(int argc, char * argv[]){
     size_t len = 0;
 	ssize_t read;
     PriorityQueue queue1;
+    queue1.size = 0;
 
 	while((read = getline(&buf, &len, fp)) != -1){
         
-        char *token = strtok(buf, " \n");
+        char *token = strtok(buf, " \t\n");
         //TODO: error handling
         Process p1;
 
@@ -66,7 +67,7 @@ int main(int argc, char * argv[]){
             p1.priority = atoi(token);
         token = strtok(NULL, " \n");
         if(token != NULL)	
-            p1.filename = token; //binary file, have to exec it
+            p1.filename = strdup(token); //binary file, have to exec it
         if(len == 3){
             token = strtok(NULL, " \n");
             if(token != NULL){
@@ -76,7 +77,7 @@ int main(int argc, char * argv[]){
         } else if(len > 3){
             token = strtok(NULL, " \n");
             if(token != NULL)
-                p1.params1 = token; // this param goes w/ program
+                p1.params1 = strdup(token); // this param goes w/ program
             token = strtok(NULL, " \n");
             if(token != NULL)
                 p1.bursttime = atoi(token);           
@@ -90,23 +91,15 @@ int main(int argc, char * argv[]){
     /*Processes with the same priority should circulate, 
     and run in time quantum intervals using Round Robin*/
 
-    Process curr = dequeue(&queue1);
     while (peek(&queue1) != -1){
+        Process curr = dequeue(&queue1);
         pid_t pid = fork();
         if(pid < 0){
             perror("fork failed");
             return -1;
         } else if (pid == 0){
             //run it for time quantum using setittimer()
-            char *args[4];
-            if(curr.params1 == NULL){
-                args[0] = curr.filename;
-                args[1] = NULL;            
-            } else if(curr.params1 != NULL){
-                args[0] = curr.filename;
-                args[1] = curr.params1;
-                args[2] = NULL;
-            }
+            char *args[3] =  {curr.filename, curr.params1, NULL};
             execvp(args[0], args);
             //TODO: timer here
             //TODO: if over time quantum, then enqueue again
@@ -116,7 +109,6 @@ int main(int argc, char * argv[]){
         } else{
             wait(NULL);
         }
-        
     }
     
 	fclose(fp);

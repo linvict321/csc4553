@@ -5,9 +5,16 @@
 #define MAX 100
 
 typedef struct{
-    int items[MAX];
+    int key;
+    Process process;
+}Node;
+
+typedef struct{
+    Node items[MAX];
     int size;
 }PriorityQueue;
+
+
 
 typedef struct{
     int pid;
@@ -17,10 +24,10 @@ typedef struct{
     int bursttime; //#of times to run it
 }Process;
 
-void swap(int* a, int*b);
+void swap(Node* a, Node*b);
 void heapifyUp(PriorityQueue *pg, int index);
 void enqueue(PriorityQueue *pq, int value, Process p1);
-int heapifyDown(PriorityQueue *pq, int index);
+void heapifyDown(PriorityQueue *pq, int index);
 Process dequeue(PriorityQueue *pq);
 int peek(PriorityQueue *pq);
 
