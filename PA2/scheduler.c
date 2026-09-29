@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -17,9 +18,9 @@ Processes with the same priority should circulate, and run in
 time quantum intervals using Round Robin. When a process
 concludes, it should be taken out of circulation. */
 
-// void timer_callback(int signum){
-//     printf("timer done");
-// }
+void timer_handler(int signum){
+    (void)signum;
+}
 
 int main(int argc, char * argv[]){
 
@@ -34,6 +35,22 @@ int main(int argc, char * argv[]){
         printf("Invalid time\n");
         exit(1);
     }
+
+    //timer
+    struct sigaction sa;
+    struct itimerval timer;
+    sa.sa_handler = &timer_handler;
+    sigaction(SIGALRM, &sa, NULL);
+
+    struct itimerval timer;
+    //how many sec + uc
+    timer.it_value.tv_sec = time_quant/1000; //TODO: check how to break up timer into sec + milliseconds
+    timer.it_value.tv_usec = 0;
+    //num of intervals
+    timer.it_interval.tv_sec = 128; //TODO: fix this number
+    timer.it_interval.tv_usec = 0;
+    setittimer(ITIMER_REAL, &timer, NULL);
+
 
     //file reader
     FILE *fp;
@@ -55,37 +72,47 @@ int main(int argc, char * argv[]){
 
 	while((read = getline(&buf, &len, fp)) != -1){
         
-	Process p1;
+	    Process p1;
         char *token = strtok(buf, " \t\n");
-        int numT = 0;  
-        
-	//TODO: set inplace real error checking
-        if(token != NULL)
-            p1.pid = atoi(token);
-	numT++;
-        token = strtok(NULL, " \t\n");
-        if(token != NULL)   
-            p1.priority = atoi(token);
-        numT++;
-	token = strtok(NULL, " \t\n");
-        if(token != NULL)	
-	    p1.filename = strdup(token); //binary file, have to exec it
-	numT++;
-	//printf("%s\n", p1.filename);				 
-        if(len == 3){
+        int i = 0;  
+        char *array[6];
+
+        //get all six items
+        while(token != NULL && i < 6){
+            array[i] = token;
             token = strtok(NULL, " \t\n");
-            if(token != NULL){
-                p1.bursttime = atoi(token);
-                p1.params1 = NULL;
-            }
-        } else if(len > 3){
-            token = strtok(NULL, " \t\n");
-            if(token != NULL)
-                p1.params1 = strdup(token); // this param goes w/ program
-            token = strtok(NULL, " \t\n");
-            if(token != NULL)
-                p1.bursttime = atoi(token);           
+            i++;
         }
+        //parse through depending on token length
+        if(i == 4){
+            p1.pid = atoi(array[0]);
+            p1.priority = atoi(array[1]);
+            p1.filename = strdup(array[2]);
+            p1.bursttime = atoi(array[3]);
+            p1.params1 = NULL;
+        } else if(i == 5){
+            p1.pid = atoi(array[0]);
+            p1.priority = atoi(array[1]);
+            p1.filename = strdup(array[2]);
+            p1.bursttime = atoi(array[3]);
+
+            //strip quotes in params1
+            char *quotes_str = array[4];
+            int len_params1 = strlen(quotes_str);
+            if(len_params1 > 0 && quotes_str[len_params1 - 1] == '"'){
+                quotes_str[len_params1 -1] = '\0';
+                len_params1--;
+            }
+            if(len_params1 > 0 && quotes_str[0] == '"'){
+                quotes_str++;
+            }
+
+            p1.params1 = strdup(quotes_str);
+        } else{
+            printf("invalid line\n");
+            return -1;
+        }
+
         //add to pq
         enqueue(&queue1, p1.priority, p1);					  	
 	}	
@@ -93,7 +120,12 @@ int main(int argc, char * argv[]){
 	free(buf);	
 
     /*Processes with the same priority should circulate, 
-    and run in time quantum intervals using Round Robin*/
+    and run in time quantum intervals using Round Robin
+    
+    9. dynamically allocate and deallocate resources for each
+    process.
+    4. allow each process to run until either the quantum expires or
+    it terminates or it suspends itself.*/
 
     while (peek(&queue1) != -1){
         Process curr = dequeue(&queue1);
@@ -104,11 +136,14 @@ int main(int argc, char * argv[]){
         } else if (pid == 0){
             //run it for time quantum using setittimer()
             char path[128];
-	    snprintf(path, sizeof(path), "./%s", curr.filename);
-	    char *args[3] =  {path, curr.params1, NULL};
-	    printf("%s %s\n", curr.filename, curr.params1);
+            snprintf(path, sizeof(path), "./%s", curr.filename);
+            char *args[3] =  {path, curr.params1, NULL};
+            printf("%s %s\n", curr.filename, curr.params1);
+            
+            //timer pause?
+            pause();
+
             execvp(args[0], args);
-            //TODO: timer here
             //TODO: if over time quantum, then enqueue again
             
             perror("execvp failed");
