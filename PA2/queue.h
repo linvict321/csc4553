@@ -3,13 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define MAX 100
+#define MAX_PARAMS 8
 
 typedef struct{
     int pid;
     int priority;
     char *filename;
-    char *params1; //input chars
-    int bursttime; //#of times to run it
+    char *params[MAX_PARAMS]; //input chars
+    int nparams;
+    pid_t child_pid;
 }Process;
 
 typedef struct{

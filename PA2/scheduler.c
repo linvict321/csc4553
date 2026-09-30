@@ -17,9 +17,32 @@ to completion.
 Processes with the same priority should circulate, and run in
 time quantum intervals using Round Robin. When a process
 concludes, it should be taken out of circulation. */
+#define PRIORITY_MULT 1000000
+volatile sig_atmoic_t quantum_expired = 0;
 
 void timer_handler(int signum){
     (void)signum;
+    quantum_expired = 1;
+}
+
+void start_timer(int ms){
+    struct itimerval timer;
+    timer.it_value.tv_sec  = ms / 1000;
+    timer.it_value.tv_usec = (ms % 1000) * 1000; /* remainder -> microseconds */
+    timer.it_interval.tv_sec  = 0;
+    timer.it_interval.tv_usec = 0;
+    if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
+        perror("setitimer");
+    }
+}
+
+void cancel_timer(void){
+    struct itimerval timer;
+    timer.it_value.tv_sec = 0;
+    timer.it_value.tv_usec = 0;
+    timer.it_interval.tv_sec = 0;
+    timer.it_interval.tv_usec = 0;
+    setitimer(ITIMER_REAL, &timer, NULL);
 }
 
 int main(int argc, char * argv[]){
@@ -38,18 +61,13 @@ int main(int argc, char * argv[]){
 
     //timer
     struct sigaction sa;
-    struct itimerval timer;
     sa.sa_handler = &timer_handler;
-    sigaction(SIGALRM, &sa, NULL);
-
-    struct itimerval timer;
-    //how many sec + uc
-    timer.it_value.tv_sec = time_quant/1000; //TODO: check how to break up timer into sec + milliseconds
-    timer.it_value.tv_usec = 0;
-    //num of intervals
-    timer.it_interval.tv_sec = 128; //TODO: fix this number
-    timer.it_interval.tv_usec = 0;
-    setittimer(ITIMER_REAL, &timer, NULL);
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGALRM, &sa, NULL) == -1) {
+        perror("sigaction");
+        exit(1);
+    }
 
 
     //file reader
@@ -69,56 +87,52 @@ int main(int argc, char * argv[]){
 	ssize_t read;
     PriorityQueue queue1;
     queue1.size = 0;
+    int seq = 0;
 
 	while((read = getline(&buf, &len, fp)) != -1){
         
 	    Process p1;
         char *token = strtok(buf, " \t\n");
         int i = 0;  
-        char *array[6];
+        char *array[3 + MAX_PARAMS];
 
         //get all six items
-        while(token != NULL && i < 6){
+        while(token != NULL && i < (3 + MAX_PARAMS)){
             array[i] = token;
             token = strtok(NULL, " \t\n");
             i++;
         }
         //parse through depending on token length
-        if(i == 4){
-            p1.pid = atoi(array[0]);
-            p1.priority = atoi(array[1]);
-            p1.filename = strdup(array[2]);
-            p1.bursttime = atoi(array[3]);
-            p1.params1 = NULL;
-        } else if(i == 5){
-            p1.pid = atoi(array[0]);
-            p1.priority = atoi(array[1]);
-            p1.filename = strdup(array[2]);
-            p1.bursttime = atoi(array[3]);
-
-            //strip quotes in params1
-            char *quotes_str = array[4];
-            int len_params1 = strlen(quotes_str);
-            if(len_params1 > 0 && quotes_str[len_params1 - 1] == '"'){
-                quotes_str[len_params1 -1] = '\0';
-                len_params1--;
-            }
-            if(len_params1 > 0 && quotes_str[0] == '"'){
-                quotes_str++;
-            }
-
-            p1.params1 = strdup(quotes_str);
-        } else{
+        if(i < 3){
             printf("invalid line\n");
-            return -1;
+            continue;
         }
+ 
+        p1.pid = atoi(array[0]);
+        p1.priority = atoi(array[1]);
+        p1.filename = strdup(array[2]);
+        p1.nparams = 0;
+        p1.child_pid = -1; 
 
-        //add to pq
-        enqueue(&queue1, p1.priority, p1);					  	
+        for(int j = 3; j < i && p1.nparams < MAX_PARAMS; j++){
+            char *tok = array[j];
+            size_t tl = strlen(tok);
+            if(tl > 0 && tok[tl - 1] == '"'){
+                tok[tl - 1] = '\0';
+                tl--;
+            }
+            if(tl > 0 && tok[0] == '"'){
+                tok++;
+            }
+            p1.params[p1.nparams++] = strdup(tok);
+        }
+ 
+        //add to pq, keyed by (priority, arrival order)
+        enqueue(&queue1, p1.priority * PRIORITY_MULT + seq++, p1);				  	
 	}	
 
 	free(buf);	
-
+    fclose(fp);
     /*Processes with the same priority should circulate, 
     and run in time quantum intervals using Round Robin
     
@@ -129,31 +143,73 @@ int main(int argc, char * argv[]){
 
     while (peek(&queue1) != -1){
         Process curr = dequeue(&queue1);
-        pid_t pid = fork();
-        if(pid < 0){
-            perror("fork failed");
-            return -1;
-        } else if (pid == 0){
-            //run it for time quantum using setittimer()
-            char path[128];
-            snprintf(path, sizeof(path), "./%s", curr.filename);
-            char *args[3] =  {path, curr.params1, NULL};
-            printf("%s %s\n", curr.filename, curr.params1);
-            
-            //timer pause?
-            pause();
+        if(curr.child_pid == -1){
+            pid_t pid = fork();
+            if(pid < 0){
+                perror("fork failed");
+                return -1;
+            } else if (pid == 0){
+                //run it for time quantum using setittimer()
+                raise(SIGSTOP);
+                char path[512];
+                snprintf(path, sizeof(path), "./%s", curr.filename);
+                char *args[MAX_PARAMS + 2];
+                args[0] = path;
+                int k;
+                for(k = 0; k < curr.nparams; k++){
+                    args[k + 1] = curr.params[k];
+                }
+                args[k + 1] = NULL;                
 
-            execvp(args[0], args);
-            //TODO: if over time quantum, then enqueue again
-            
-            perror("execvp failed");
-            return -1; 
-        } else{
-            wait(NULL);
+                execvp(args[0], args);
+                //TODO: if over time quantum, then enqueue again
+                
+                perror("execvp failed");
+                _exit(127); 
+            } else{
+                int status;
+                waitpid(pid, &status, WUNTRACED);
+                curr.child_pid = pid;
+            }
+        }
+        quantum_expired = 0;
+        if(kill(curr.child_pid, SIGCONT) == -1){
+            perror("kill(SIGCONT)");
+        }
+        start_timer(time_quant);
+ 
+        int status;
+        pid_t w = waitpid(curr.child_pid, &status, WUNTRACED);
+ 
+        if(w == -1 && errno == EINTR){
+            //SIGALRM interrupted us: the quantum ran out while the
+            //process was still running. Preempt it.
+            kill(curr.child_pid, SIGSTOP);
+            waitpid(curr.child_pid, &status, WUNTRACED); //reap the stop
+            //not done -> back of the line for its priority
+            enqueue(&queue1, curr.priority * PRIORITY_MULT + seq++, curr);
+        } else if (w == -1){
+            perror("waitpid");
+        } else {
+            //the process changed state on its own before the quantum
+            //expired, so whatever we armed is no longer needed
+            cancel_timer();
+ 
+            if(WIFEXITED(status) || WIFSIGNALED(status)){
+                //finished (normally or via signal) -> out of circulation
+                free(curr.filename);
+                for(int k = 0; k < curr.nparams; k++){
+                    free(curr.params[k]);
+                }
+            } else if (WIFSTOPPED(status)){
+                //process suspended itself before its quantum ran out;
+                //it's still alive, give it another turn later
+                enqueue(&queue1, curr.priority * PRIORITY_MULT + seq++, curr);
+            }
         }
     }
     
-	fclose(fp);
+	
     return 0;
 
 }
