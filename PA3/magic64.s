@@ -1,3 +1,4 @@
+# To assemble magic64.S, use gcc: gcc -o magic64.o -c magic64.S
 #ifdef __APPLE__
 #define FNAME _swap_rfiles
 #else /* everyone else */

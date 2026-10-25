@@ -1,0 +1,94 @@
+#include <stdio.h>
+#include "lwp.h"
+
+int thread_counter = 1;
+
+//put scheduler functions here,scheduler should be a circular queue?
+
+void s_init(void){
+
+} /* initialize any structures */
+void s_shutdown(void){
+
+} /* tear down any structures */
+void s_admit(thread new){
+
+} /* add a thread to the pool */
+void s_remove(thread victim){
+
+} /* remove a thread from the pool */
+thread s_next(void){
+
+} /* select a thread to schedule */
+int s_qlen(void){
+
+} /* number of ready threads */
+
+
+
+/*Creates a new lightweight process (thread) which executes the given function with the given
+argument. It returns the lightweight thread id of the new thread or NO_THREAD if the thread cannot be
+created */
+tid_t lwp_create(lwpfun function, void* argument){
+
+    context t1 = new thread;
+    if(thread == NULL){ //if thread fails
+        return NO_THREAD;
+    }
+
+    thread.id = thread_counter;
+    thread_counter++;
+    //add to scheduler
+    // thread will execute until it either calls lwp_exit() or the function returns with a termination status
+    
+    return thread.id;
+}
+
+//start the lwp, converts calling thread into lwp
+void lwp_start(void){
+    //converts thread into lwp
+    //yield to whichever thread the scheduler chooses
+
+}
+
+/* Yields control to another LWP, based on the scheduler choice. It saves the current LWP's context, picks
+the next one, restores that thread's context and returns. If there is no next thread, terminates the
+program.
+It causes a thread to yield control back to the thread library, whereupon the library chooses another
+thread (or maybe the same one) using the round-robin scheduler, and then runs that one.*/
+void lwp_yield(void){
+
+}
+
+/*Terminates the current LWP and yields to whichever thread the scheduler chooses.
+ It does not return.*/
+void lwp_exit(int exitval){
+
+}
+
+/*Waits for a thread to terminate, deallocates its resources, and reports its termination status if status is
+non-NULL. Returns the tid of the terminated thread or NO_THREAD*/
+tid_t lwp_wait(int* status){
+
+    if(){
+        return NO_THREAD;
+    }
+
+    return thread.id
+}
+
+void lwp_set_scheduler(scheduler fun){
+
+}
+scheduler lwp_get_scheduler(void){
+
+}
+thread tid2thread(tid_t tid){
+
+}
+
+
+int main(int argc, char * argv[]){
+    scheduler my_scheduler = (scheduler)malloc(sizeof(struct scheduler));
+    
+}

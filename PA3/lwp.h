@@ -37,27 +37,27 @@ typedef unsigned long tid_t;
 #define NO_THREAD 0 /* an always invalid thread id */
 typedef struct threadinfo_st *thread;
 typedef struct threadinfo_st {
-tid_t tid; /* lightweight process id */
-unsigned long *stack; /* Base of allocated stack */
-size_t stacksize; /* Size of allocated stack */
-rfile state; /* saved registers */
-unsigned int status; /* exited? exit status? */
-thread lib_one; /* Two pointers reserved */
-thread lib_two; /* for use by the library */
-thread sched_one; /* Two more for */
-thread sched_two; /* schedulers to use */
-thread exited; /* and one for lwp_wait() */
+    tid_t tid; /* lightweight process id */
+    unsigned long *stack; /* Base of allocated stack */
+    size_t stacksize; /* Size of allocated stack */
+    rfile state; /* saved registers */
+    unsigned int status; /* exited? exit status? */
+    thread lib_one; /* Two pointers reserved */
+    thread lib_two; /* for use by the library */
+    thread sched_one; /* Two more for */
+    thread sched_two; /* schedulers to use */
+    thread exited; /* and one for lwp_wait() */
 } context;
 typedef int (*lwpfun)(void *); /* type for lwp function */
 /* Tuple that describes a scheduler */
 
 typedef struct scheduler {
-void (*init)(void); /* initialize any structures */
-void (*shutdown)(void); /* tear down any structures */
-void (*admit)(thread new); /* add a thread to the pool */
-void (*remove)(thread victim); /* remove a thread from the pool */
-thread (*next)(void); /* select a thread to schedule */
-int (*qlen)(void); /* number of ready threads */
+    void (*init)(void); /* initialize any structures */
+    void (*shutdown)(void); /* tear down any structures */
+    void (*admit)(thread new); /* add a thread to the pool */
+    void (*remove)(thread victim); /* remove a thread from the pool */
+    thread (*next)(void); /* select a thread to schedule */
+    int (*qlen)(void); /* number of ready threads */
 } *scheduler;
 /* lwp functions */
 extern tid_t lwp_create(lwpfun,void *);
