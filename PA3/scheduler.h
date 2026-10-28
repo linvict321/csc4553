@@ -1,12 +1,11 @@
+#ifndef SCHEDULER_H
+#define SCHEDULER_H
 #include <stdio.h>
 #include "lwp.h"
 
-typedef struct scheduler {
-    void (*init)(void); /* initialize any structures */
-    void (*shutdown)(void); /* tear down any structures */
-    void (*admit)(thread new); /* add a thread to the pool */
-    void (*remove)(thread victim); /* remove a thread from the pool */
-    thread (*next)(void); /* select a thread to schedule */
-    int (*qlen)(void); /* number of ready threads */
-} *scheduler;
+typedef struct scheduler *scheduler;
+typedef struct threadinfo_st *thread;
+
+
+#endif
 

@@ -26,7 +26,7 @@ tid_t lwp_create(lwpfun function, void* argument){
 void lwp_start(void){
     //converts thread into lwp
     //yield to whichever thread the scheduler chooses
-
+    
 }
 
 /* Yields control to another LWP, based on the scheduler choice. It saves the current LWP's context, picks
