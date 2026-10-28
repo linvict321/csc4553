@@ -3,28 +3,6 @@
 
 int thread_counter = 1;
 
-//put scheduler functions here,scheduler should be a circular queue?
-
-void s_init(void){
-
-} /* initialize any structures */
-void s_shutdown(void){
-
-} /* tear down any structures */
-void s_admit(thread new){
-
-} /* add a thread to the pool */
-void s_remove(thread victim){
-
-} /* remove a thread from the pool */
-thread s_next(void){
-
-} /* select a thread to schedule */
-int s_qlen(void){
-
-} /* number of ready threads */
-
-
 
 /*Creates a new lightweight process (thread) which executes the given function with the given
 argument. It returns the lightweight thread id of the new thread or NO_THREAD if the thread cannot be
