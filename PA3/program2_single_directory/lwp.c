@@ -1,213 +1,242 @@
-#include <stdio.h>
-#include <stdint.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/resource.h>
 #include <sys/mman.h>
+
 #include "rr.h"
 #include "lwp.h"
-#include "fp.h"
 
-static tid_t thread_counter = 1;
-static scheduler my_scheduler = &rr_publish;
-static thread curr_thread = NULL;
-static thread valid_t = NULL; //points to head of linked list of threads
-//fifo queue ptrs of terminated and waiting threads
+/* What we Need:
+- current thread pointer context
+- current scheduler pointer
+- thread id count (what the newest one should be)
+- list of all valid threads for tid2thread (lib_one and lib_two reserved for lib use)
+    - Note: Using lib_one for this
+- fifo queue of terminated threads
+    - so lwp_wait() can return oldest terminated thread
+    - Note: Using libtwo for this
+- fifo queue of waiting threads
+    - if no terminated threads lwp_wait() has to block, so deschedule thread
+      that called lwp_wait() (with sched->remove()) and place in wait queue
+    - Note: Using libtwo for this
+*/
+
+static scheduler sched = &rr_publish;
+static tid_t tid_count = 1;
+static thread cur_thread = NULL;
+
+//list of valid threads for tid2thread
+static thread valid_t = NULL;
+
+//fifo queue pointers of terminated and waiting threads
 static thread wait_head = NULL;
 static thread wait_tail = NULL;
 static thread exit_head = NULL;
 static thread exit_tail = NULL;
 
-static void lwp_wrap(lwpfun, void *);
-tid_t lwp_create(lwpfun,void *);
-void  lwp_exit(int status);
-tid_t lwp_gettid(void);
-void  lwp_yield(void);
-void  lwp_start(void);
-tid_t lwp_wait(int *);
-void  lwp_set_scheduler(scheduler fun);
-scheduler lwp_get_scheduler(void);
-thread tid2thread(tid_t tid);
+//wrapper from instructions
+static void lwp_wrap(lwpfun fun, void* arg) {
+    /* 
+     * Call the given function with the given argument
+     * Call lwp_exit() with its return value
+    */
+    int rval;
+    rval = fun(arg);
+    lwp_exit(rval);
+}
 
-/*Creates a new lightweight process (thread) which executes the given function with the given
-argument. It returns the lightweight thread id of the new thread or NO_THREAD if the thread cannot be
-created */
-tid_t lwp_create(lwpfun function, void* argument){
+tid_t lwp_create(lwpfun func, void * arg){
+    thread new_thread;
+    struct rlimit limit; //resource limit
+    size_t stack_size; //in bytes
+    unsigned long *end_stack; //end of stack frame
+    unsigned long *base_stack; //base of stack, beginning of stack frame
 
-    struct rlimit limit;
-    size_t stack_size;  //initialize stack; malloc won't care if it overflows, we want to use 'mmap'
-
-    thread t1 = calloc(1, sizeof(context)); //init to 0s
-    if(t1 == NULL){ //if thread fails
+    new_thread = calloc(1, sizeof(context)); //init to 0s
+    if(new_thread == NULL) { //if can't be created return NO_THREAD
         return NO_THREAD;
     }
 
-    /*The threadʼs resources will consist of a context and stack, 
-    both initialized so that when the scheduler chooses this thread and its
-    context is loaded via swap_rfiles it will run the given function*/
-    t1->tid = thread_counter++;
-    long page_size = sysconf(_SC_PAGE_SIZE); //stacks must be a multiple of memory page size
-    stack_size = 8*1024*1024; //8MB
-    //check rlimit
+    //get page size and allocate stack and context using mmap
+    long page_size = sysconf(_SC_PAGE_SIZE);
+
+    stack_size = 8 * 1024 * 1024; //8 * 1024KB * 1024 B = 8MB for deafult
+    //success and not infinite limit
     if(getrlimit(RLIMIT_STACK, &limit) == 0 && limit.rlim_cur != RLIM_INFINITY){
-        //choose 8MB
-        stack_size = (size_t)limit.rlim_cur; 
+        stack_size = (size_t)limit.rlim_cur;
     }
+
+    //round up to page size multiple
     long next_mult = (stack_size + page_size - 1) / page_size; //get to next multiple of page count
     stack_size = next_mult * page_size; 
-    t1->stacksize = stack_size;
+    new_thread->stacksize = stack_size;
 
-    //intialize thread pointer
-    t1->stack = mmap(NULL, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
-    if(t1->stack == MAP_FAILED){
-        free(t1);
+    //allocate thread stack (from instr)
+    new_thread->stack = mmap(NULL, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+    if(new_thread->stack == MAP_FAILED){
+        free(new_thread);
         return NO_THREAD;
     }
-    
-    t1->status = LWP_LIVE;
 
-    //set up the stack pointers
-    unsigned long *end_stack = (unsigned long *)((char *)t1->stack + stack_size); //stack is word addressable, convert stack_size to word
-    end_stack[-3] = 0; //fake saved rbp, popped so rsp goes to next slot
-    end_stack[-2] = (unsigned long)lwp_wrap; //return addr, ret pops this in rip (where thread starts)
-    end_stack[-1] = 0; //placeholder, occupies spot so registers come out right
+    new_thread->tid = tid_count++;
+    new_thread->status = LWP_LIVE;
 
-    
-    //saves a state
-    t1->state.fxsave = FPU_INIT;
-    t1->state.rbp = (unsigned long)end_stack;
-    t1->state.rsp = (unsigned long)end_stack;
-    t1->state.rdi = (unsigned long)function;
-    t1->state.rsi = (unsigned long)argument;
-    // thread will execute until it either calls lwp_exit() or the function returns with a termination status
-    
-    //add to lib list of valid threads and admit to curr scheduler
-    t1->lib_one = valid_t; //new thread points to head
-    valid_t = t1; //new thread becomes the head
-    my_scheduler->admit(t1);
+    //init context and stack so swap_rfiles() properly returns to lwp's func
+    //  with stack and registers arranged
+    end_stack = new_thread->stack + (stack_size / sizeof(unsigned long)); //stack is word addressable, convert stack_size to word
+    base_stack = end_stack - 3; 
+    base_stack[0] = 0;
+    base_stack[1] = (unsigned long)lwp_wrap;
+    base_stack[2] = 0;
 
-    return t1->tid;
+    new_thread->state.fxsave = FPU_INIT;
+    new_thread->state.rbp = (unsigned long)base_stack;
+    new_thread->state.rsp = (unsigned long)base_stack;
+    //for lwp_wrap, func and args
+    new_thread->state.rdi = (unsigned long)func;
+    new_thread->state.rsi = (unsigned long)arg;
+    
+    //add to lib list of valid threads and admit to current scheduler
+    new_thread->lib_one = valid_t;
+    valid_t = new_thread;
+    sched->admit(new_thread);
+
+    return new_thread->tid;
 }
 
-//start the lwp, converts calling thread into lwp
-void lwp_start(void){
-    //converts thread into lwp, creates context, adds to scheduler, don't allocate the stack
-    //yield to whichever thread the scheduler chooses
-    thread caller = calloc(1, sizeof(context));
-    if(caller == NULL){
-        return;
-    }
-    caller->tid = thread_counter++;
-    caller->status = LWP_LIVE;
-    curr_thread = caller;
-    caller->lib_one = valid_t;
-    valid_t = caller;
-    my_scheduler->admit(caller);
-    lwp_yield();
+void  lwp_exit(int status){
+    //terminates current lwp
+    //yields to thread in scheduler, doesn't return
+    //once thread is waited for in lwp_wait(), resources deallocated
+    //  and uses lwp_yield()
 
-}
+    //need to save to queue of terminated threads
+    thread term_thread = cur_thread;
+    //MKTERMSTAT combines low 8 bits of status and lwp_term flag
+    cur_thread->status = MKTERMSTAT(LWP_TERM, status);
+    sched->remove(term_thread);
 
-/* Yields control to another LWP, based on the scheduler choice. It saves the current LWP's context, picks
-the next one, restores that thread's context and returns. If there is no next thread, terminates the
-program.
-It causes a thread to yield control back to the thread library, whereupon the library chooses another
-thread (or maybe the same one) using the round-robin scheduler, and then runs that one.*/
-void lwp_yield(void){
- //saves curr lwp context
-    thread old_t = curr_thread;
-    //pick next one, restore the context, returns
-     //if scheduler is empty, end it otherwise return
-    thread next_t = my_scheduler->next();
-    if(next_t == NULL){
-        exit(0);
-    }
-
-    curr_thread = next_t;
-    swap_rfiles(&(old_t->state), &(next_t->state));   
-}
-
-/*Terminates the current LWP and yields to whichever thread the scheduler chooses.
- It does not return.*/
-void lwp_exit(int exitval){
-
-    //terminate current lwp, yields to thread that the scheduler chooses
-    thread end_t = curr_thread;
-    curr_thread->status = MKTERMSTAT(LWP_TERM, exitval);
-    my_scheduler->remove(end_t);
-
-    //remove from fifo queue, dealloc resources while its waiting in lwp wait
     if(wait_head != NULL){
         thread wait_pop = wait_head;
-        wait_head = wait_head->lib_two; //wait head to next waiting thread?
+        wait_head = wait_head->lib_two; //set wait_head to next waiting thread
 
-        if(wait_head == NULL){
+        if(wait_head == NULL){ //if nothing left in queue, set tail to null too
             wait_tail = NULL;
         }
 
-        wait_pop->lib_two = NULL;
-        wait_pop->exited = end_t;
-        my_scheduler->admit(wait_pop);
+        wait_pop->lib_two = NULL; //no longer wait queue, going to be scheduled
+        wait_pop->exited = term_thread; //associate term thread with oldest waiting
+        sched->admit(wait_pop);
     } else {
-        end_t->lib_two = NULL;
+        term_thread->lib_two = NULL; //so doesn't point to any waiting threads, in term queue now
+
         if(exit_tail != NULL){
-            exit_tail->lib_two = end_t;
-            exit_tail = end_t;
+            exit_tail->lib_two = term_thread; //add to end of terminated fifo
+            exit_tail = term_thread;
         } else {
-            exit_head = end_t;
-            exit_tail = end_t;
+            exit_head = term_thread;
+            exit_tail = term_thread;
         }
     }
 
     lwp_yield();
-
 }
 
-/*Waits for a thread to terminate, deallocates its resources, and reports its termination status if status is
-non-NULL. Returns the tid of the terminated thread or NO_THREAD*/
-tid_t lwp_wait(int* status){
-    
-    thread terminated_thread;
+tid_t lwp_gettid(void){  
+    if(cur_thread == NULL){
+        return NO_THREAD;
+    }
+    return cur_thread->tid;
+}
 
-    if(exit_head == NULL){ //no threads left in terminated queue
-        if(my_scheduler->qlen() < 1){
+void  lwp_yield(void){
+    //save current lwp context
+    //pick next lwp from scheduler rrnext()
+    //if no next thread terminate program
+    //first see if have next thread, if so swap_rfiles to save context and do next
+    thread old_thread = cur_thread;
+    thread next_thread = sched->next();
+    if(next_thread == NULL){
+        exit(0);
+    }
+
+    cur_thread = next_thread;
+    //old thread context in rdi, new in rsi
+    swap_rfiles(&(old_thread->state), &(next_thread->state));
+}
+
+void  lwp_start(void){
+    //converts calling/original thread to lwp by creating context
+    //and admitting to scheduler
+    //don't allocate stack for it, use stack already hasw
+    //call lwp_yield
+    thread caller = calloc(1, sizeof(context));
+    caller->tid = tid_count++;
+    caller->status = LWP_LIVE;
+    cur_thread = caller;
+    caller->lib_one = valid_t;
+    valid_t = caller;
+    sched->admit(caller);
+    lwp_yield();
+}
+
+tid_t lwp_wait(int *status){
+    //deallocated terminated thread resources
+    //reports termination status if not NULL
+    //returns tid of terminated thread
+    //if multiple terminated threads
+        //return oldest thread (first in FIFO) w/o blocking
+    //if no terminated threads
+        //deschedule sched->remove()
+        //place on queue of waiting threads
+        //and block
+    //if multiple waiting threads?
+
+    thread term_thread;
+
+    if(exit_head == NULL){ //no threads in terminated fifo queue
+        //if no threads left to wait on
+        if(sched->qlen() <= 1){
             return NO_THREAD;
         }
-
-        my_scheduler->remove(curr_thread);
-        //place into thw waiting queue
-        if(wait_tail == NULL){
-            curr_thread->lib_two = NULL;
-            wait_tail = curr_thread;
-            wait_head = curr_thread;
-        } else{
-            curr_thread->lib_two = NULL;
-            wait_tail->lib_two = curr_thread;
-            wait_tail = curr_thread;
+        //deschedue cur_thread sched->remove()
+        sched->remove(cur_thread);
+        //place in queue for waiting, wait_tail
+        if(wait_tail == NULL){ //empty waiting fifo queue
+            cur_thread->lib_two = NULL;
+            wait_tail = cur_thread;
+            wait_head = cur_thread;
+        } else {
+            cur_thread->lib_two = NULL;
+            wait_tail->lib_two = cur_thread;
+            wait_tail = cur_thread;
         }
-
-        //block til thread terms
+        //block until a thread terminates
         lwp_yield();
 
-        terminated_thread = curr_thread->exited;
-        curr_thread->exited = NULL;
-    } else{
-        //return oldest waiting terminated exit_head
-        terminated_thread = exit_head;
-        exit_head = exit_head->lib_two; //next term in queue
-        if(exit_head == NULL){
+        //once recieves terminated thread, in thread->exited
+        term_thread = cur_thread->exited;
+        cur_thread->exited = NULL;
+    } else {
+        //return oldest waiting terminated, exit_head
+        term_thread = exit_head;
+        exit_head = exit_head->lib_two; //next term thread in fifo queue
+        if(exit_head == NULL){ //if after popping from queue its empty
             exit_tail = NULL;
         }
     }
-    if(status != NULL){
-        *status = terminated_thread->status;
+    
+    if(status != NULL){ //have to populat *status
+        *status = term_thread->status;
     }
 
-    //free, remove from valid, munmap
-    tid_t exit_tid = terminated_thread->tid;
+    //free stuff, remove from valid, munmap (returns 0 on success)
+    tid_t exit_tid = term_thread->tid;
     thread start = valid_t;
     thread prev = NULL;
-    while(start != NULL){
-        if(start->tid == terminated_thread->tid){
+    while(start != NULL){ //lib_one holds valid threads
+        if(start->tid == term_thread->tid){
+            //remove from list
             break;
         }
         prev = start;
@@ -217,80 +246,61 @@ tid_t lwp_wait(int* status){
     //take out of valid list
     if(start != NULL){
         if(prev == NULL){
-            valid_t = start->lib_one;
+            valid_t = start->lib_one; //nothing before, so just remove and set to next
         } else {
             prev->lib_one = start->lib_one;
         }
     }
-
-    if(terminated_thread->stack != NULL){ //if null, then original calling thread
-        munmap(terminated_thread->stack, terminated_thread->stacksize);
+    
+    if(term_thread->stack != NULL){ //if null, then original/calling thread
+        munmap(term_thread->stack, term_thread->stacksize);
     }
-    free(terminated_thread);    
+    free(term_thread);
 
     return exit_tid;
 }
 
-//installing a new scheduling function
-void lwp_set_scheduler(scheduler fun){
-    //causes lwp to use given scheduler to choose next thread to run
-    if(fun == NULL && my_scheduler != &rr_publish) {
+void  lwp_set_scheduler(scheduler fun){
+    if(fun == NULL && sched != &rr_publish){ //no passed func, and not currently rr scheduler
         fun = &rr_publish;
-    } else if(fun == NULL && my_scheduler == &rr_publish){
+    } else if(fun == NULL && sched == &rr_publish){ //if no passed func but already rr scheduler
         return;
     }
-    
-    //transfers all threads from old scheduler to new one in next() order
-    scheduler old_scheduler = my_scheduler;
+
+    //need to transfer contexts from old to new scheduler
+    scheduler old_sched = sched;
     fun->init();
-    while(old_scheduler->qlen() > 0){
-        thread temp = old_scheduler->next();
-        old_scheduler->remove(temp);
+
+    //remove from old_sched add to new
+    while(old_sched->qlen() > 0){
+        thread temp = old_sched->next();
+        old_sched->remove(temp);
         fun->admit(temp);
-    } 
+    }
 
-    old_scheduler->shutdown();
-    my_scheduler = fun;
+    //shut down old and set new
+    old_sched->shutdown();
+    sched = fun;
 }
 
-//find out what the current scheduler is
 scheduler lwp_get_scheduler(void){
-    return my_scheduler;
+    return sched;
 }
 
-//Returns the thread corresponding to a given thread ID, or NULL if the ID is invalid
 thread tid2thread(tid_t tid){
-
-    if(tid == NO_THREAD){
+    //need to look at valid list of threads
+    //returns thread corresponding to tid
+    if(tid == NO_THREAD){ //invalid
         return NULL;
     }
 
     thread start = valid_t;
-    while(start != NULL){
+    while(start != NULL){ //lib_one holds valid threads
         if(start->tid == tid){
             return start;
         }
         start = start->lib_one;
     }
+
     return NULL;
-}
-
-//Returns the tid of the calling LWP or NO_THREAD if not called by an LWP.
-tid_t lwp_gettid(void){
-
-    if(curr_thread == NULL){
-        return NO_THREAD;
-    }
-
-    return curr_thread->tid;    
-}
-
-static void lwp_wrap(lwpfun fun, void* arg) {
-    /*
-    * Call the given function with the given argument
-    * Call lwp_exit() with its return value
-    */
-    int rval;
-    rval = fun(arg);
-    lwp_exit(rval);
 }
