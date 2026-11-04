@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/resource.h>
@@ -17,7 +18,7 @@ static thread wait_tail = NULL;
 static thread exit_head = NULL;
 static thread exit_tail = NULL;
 
-static void lwp_wrap(lwpfun, void);
+static void lwp_wrap(lwpfun, void *);
 tid_t lwp_create(lwpfun,void *);
 void  lwp_exit(int status);
 tid_t lwp_gettid(void);
@@ -36,7 +37,7 @@ tid_t lwp_create(lwpfun function, void* argument){
     struct rlimit limit;
     size_t stack_size;  //initialize stack; malloc won't care if it overflows, we want to use 'mmap'
 
-    thread t1 = (thread)malloc(sizeof(thread)); 
+    t1 = calloc(1, sizeof(context)); //init to 0s
     if(t1 == NULL){ //if thread fails
         return NO_THREAD;
     }
@@ -44,19 +45,18 @@ tid_t lwp_create(lwpfun function, void* argument){
     /*The threadʼs resources will consist of a context and stack, 
     both initialized so that when the scheduler chooses this thread and its
     context is loaded via swap_rfiles it will run the given function*/
-    thread->tid = thread_counter++;
+    t1->tid = thread_counter++;
     long page_size = sysconf(_SC_PAGE_SIZE); //stacks must be a multiple of memory page size
     stack_size = 8*1024*1024; //8MB
     //check rlimit
-    if(getrlimit(RLIMIT_STACK, &limit) == 0 || limit.rlim_cur != RLIM_INFINITY){
+    if(getrlimit(RLIMIT_STACK, &limit) == 0 && limit.rlim_cur != RLIM_INFINITY){
         //choose 8MB
         stack_size = (size_t)limit.rlim_cur; 
     }
-    //if resource limit is not a multiple of page size, if not, round up
-    if(limit.rlim_cur % page_size != 0){
-        long next_mult = (stack_size + page_size - 1)/page_size;
-        t1->stacksize = next_mult * page_size;
-    }
+    long next_mult = (stack_size + page_size - 1) / page_size; //get to next multiple of page count
+    stack_size = next_mult * page_size; 
+    t1->stacksize = stack_size;
+
     //intialize thread pointer
     t1->stack = mmap(NULL, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
     if(t1->stack == MAP_FAILED){
@@ -67,7 +67,7 @@ tid_t lwp_create(lwpfun function, void* argument){
     t1->status = LWP_LIVE;
 
     //set up the stack pointers
-    unsigned long *end_stack = t1->stack + (stack_size / sizeof(unsigned long)); //stack is word addressable, convert stack_size to word
+    unsigned long *end_stack = (unsigned long *)((char *)t1->stack + stack_size); //stack is word addressable, convert stack_size to word
     end_stack[-3] = 0; //fake saved rbp, popped so rsp goes to next slot
     end_stack[-2] = (unsigned long)lwp_wrap; //return addr, ret pops this in rip (where thread starts)
     end_stack[-1] = 0; //placeholder, occupies spot so registers come out right
@@ -93,7 +93,7 @@ tid_t lwp_create(lwpfun function, void* argument){
 void lwp_start(void){
     //converts thread into lwp, creates context, adds to scheduler, don't allocate the stack
     //yield to whichever thread the scheduler chooses
-    thread caller = (thread)malloc(sizeof(context));
+    thread caller = calloc(1, sizeof(context));
     if(caller == NULL){
         return;
     }
@@ -132,7 +132,7 @@ void lwp_exit(int exitval){
 
     //terminate current lwp, yields to thread that the scheduler chooses
     thread end_t = curr_thread;
-    curr_thread->status = MKTERMSTAT(LWP_TERM, status);
+    curr_thread->status = MKTERMSTAT(LWP_TERM, exitval);
     my_scheduler->remove(end_t);
 
     //remove from fifo queue, dealloc resources while its waiting in lwp wait
@@ -261,7 +261,7 @@ scheduler lwp_get_scheduler(void){
 //Returns the thread corresponding to a given thread ID, or NULL if the ID is invalid
 thread tid2thread(tid_t tid){
 
-    if(tid = NO_THREAD){
+    if(tid == NO_THREAD){
         return NULL;
     }
 

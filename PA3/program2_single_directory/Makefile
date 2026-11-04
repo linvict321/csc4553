@@ -19,12 +19,12 @@ clean:
 	rm -f $(OBJS) *~ TAGS *.a *.o nums hungry snakes liblwp.so
 
 nums: numbersmain.o $(SHAREDLIBS)
-	$(CC) $(CFLAGS) -g -o nums numbersmain.o $(SNAKELIBS) $(SHAREDLIBS)
+	$(CC) $(CFLAGS) -g -o nums numbersmain.o $(SHAREDLIBS) $(SNAKELIBS)
 
 numbersmain.o: numbersmain.c AlwaysZero.c lwp.h
-	$(CC) $(CFLAGS) -c numbersmain.c -L. -llwp
+	$(CC) $(CFLAGS) -c numbersmain.c 
 
-magic.o: magic.s
+magic64.o: magic64.s
 	$(CC) $(CFLAGS) -c -o magic.o magic.s
 
 %64.o: %.c
@@ -33,25 +33,25 @@ magic.o: magic.s
 %64.o: %64.S
 	$(CC) $(CFLAGS) -m64 -c -o $@ $<
 
-lwp.o: lwp.h
+lwp64.o: lwp.h rr.h fp.h
+rr64.o: rr.h lwp.h
 
 liblwp.so: $(OBJS64)
 	$(CC) $(CFLAGS) -shared -o $@ $(OBJS64)
 
 snakes: randomsnakes.o AlwaysZero.c $(SHAREDLIBS)
-	$(CC) $(CFLAGS) -o snakes randomsnakes.o $(SNAKELIBS) $(SHAREDLIBS)
+	$(CC) $(CFLAGS) -o snakes randomsnakes.o $(SHAREDLIBS) $(SNAKELIBS)
 
 hungry: hungrysnakes.o AlwaysZero.c $(SHAREDLIBS)
-	$(CC) $(CFLAGS) -o hungry hungrysnakes.o $(SNAKELIBS) $(SHAREDLIBS)
+	$(CC) $(CFLAGS) -o hungry hungrysnakes.o $(SHAREDLIBS) $(SNAKELIBS)
 
 hungrysnakes.o: hungrysnakes.c AlwaysZero.c util.c lwp.h snakes.h
-	$(CC) $(CFLAGS) -c hungrysnakes.c -L. -llwp
+	$(CC) $(CFLAGS) -c hungrysnakes.c 
 
 randomsnakes.o: randomsnakes.c AlwaysZero.c util.c lwp.h snakes.h
-	$(CC) $(CFLAGS) -c randomsnakes.c -L. -llwp
+	$(CC) $(CFLAGS) -c randomsnakes.c 
 
-numbermain.o: numbersmain.c lwp.h
-	$(CC) $(CFLAGS) -c numbersmain.c
+
 
 rs: snakes
 	(export LD_LIBRARY_PATH=.; ./snakes)
