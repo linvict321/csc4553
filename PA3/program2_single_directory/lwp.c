@@ -166,20 +166,69 @@ void lwp_exit(int exitval){
 non-NULL. Returns the tid of the terminated thread or NO_THREAD*/
 tid_t lwp_wait(int* status){
     
-    if(scheduler->rr_qlen <= 1){
-        return NO_THREAD;
+    thread terminated_thread;
+
+    if(exit_head == NULL){ //no threads left in terminated queue
+        if(scheduler->rr_qlen < 1){
+            return NO_THREAD;
+        }
+
+        my_scheduler->remove(curr_thread);
+        //place into thw waiting queue
+        if(wait_tail == NULL){
+            curr_thread->lib_two = NULL;
+            wait_tail = curr_thread;
+            wait_head = curr_thread;
+        } else{
+            curr_thread->lib_two = NULL;
+            wait_tail->lib_two = curr_thread;
+            wait_tail = curr_thread;
+        }
+
+        //block til thread terms
+        lwp_yield();
+
+        terminated_thread = curr_thread->exited;
+        curr_thread->exited = NULL;
+    } else{
+        //return oldest waiting terminated exit_head
+        terminated_thread = exit_head;
+        exit_head = exit_head->lib_two; //next term in queue
+        if(exit_head == NULL){
+            exit_tail = NULL;
+        }
+    }
+    if(status != NULL){
+        *status = terminated_thread->status;
     }
 
-    if(status){
-        /* threadʼs status consists of a flag indicating whether it is running (LWP_LIVE) or terminated (LWP_TERM)
-        and an 8-bit integer that can be passed back via lwp_wait(). A threadʼs termination value is the low 8
-        bits either of the argument to lwp_exit() or of the return value of the thread function. These are
-        combined into a single integer using the macro MKTERMSTAT() which is what is passed back by
-        lwp_wait(). Macros for dealing with termination statuses shown in table below*/
-
+    //free, remove from valid, munmap
+    tid_t exit_tid = terminated_thread->tid;
+    thread start = valid_t;
+    thread prev = NULL;
+    while(start != NULL){
+        if(start->tid == terminated_thread->tid){
+            break;
+        }
+        prev = start;
+        start = start->lib_one;
     }
 
-    return thread.id
+    //take out of valid list
+    if(start != NULL){
+        if(prev == NULL){
+            valid_t = start->lib_one;
+        } else {
+            prev->lib_one = start->lib_one;
+        }
+    }
+
+    if(terminated_thread->stack != NULL){ //if null, then original calling thread
+        munmap(terminated_thread->stack, terminated_thread->stacksize);
+    }
+    free(terminated_thread);    
+
+    return exit_tid;
 }
 
 //installing a new scheduling function
