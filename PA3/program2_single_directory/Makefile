@@ -24,8 +24,8 @@ nums: numbersmain.o $(SHAREDLIBS)
 numbersmain.o: numbersmain.c AlwaysZero.c lwp.h
 	$(CC) $(CFLAGS) -c numbersmain.c 
 
-magic64.o: magic64.s
-	$(CC) $(CFLAGS) -c -o magic.o magic.s
+magic64.o: magic64.S
+	$(CC) $(CFLAGS) -m64 -c -o $@ $<
 
 %64.o: %.c
 	$(CC) $(CFLAGS) -m64 -c -o $@ $*.c

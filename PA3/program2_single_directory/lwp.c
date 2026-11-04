@@ -8,7 +8,7 @@
 #include "lwp.h"
 #include "fp.h"
 
-static int thread_counter = 1;
+static tid_t thread_counter = 1;
 static scheduler my_scheduler = &rr_publish;
 static thread curr_thread = NULL;
 static thread valid_t = NULL; //points to head of linked list of threads
@@ -37,7 +37,7 @@ tid_t lwp_create(lwpfun function, void* argument){
     struct rlimit limit;
     size_t stack_size;  //initialize stack; malloc won't care if it overflows, we want to use 'mmap'
 
-    t1 = calloc(1, sizeof(context)); //init to 0s
+    thread t1 = calloc(1, sizeof(context)); //init to 0s
     if(t1 == NULL){ //if thread fails
         return NO_THREAD;
     }
@@ -75,10 +75,10 @@ tid_t lwp_create(lwpfun function, void* argument){
     
     //saves a state
     t1->state.fxsave = FPU_INIT;
-    t1->stack.rbp = (unsigned long)end_stack;
-    t1->stack.rsp = (unsigned long)end_stack;
-    t1->stack.rdi = (unsigned long)function;
-    t1->stack.rsi = (unsigned long)argument;
+    t1->state.rbp = (unsigned long)end_stack;
+    t1->state.rsp = (unsigned long)end_stack;
+    t1->state.rdi = (unsigned long)function;
+    t1->state.rsi = (unsigned long)argument;
     // thread will execute until it either calls lwp_exit() or the function returns with a termination status
     
     //add to lib list of valid threads and admit to curr scheduler
@@ -169,7 +169,7 @@ tid_t lwp_wait(int* status){
     thread terminated_thread;
 
     if(exit_head == NULL){ //no threads left in terminated queue
-        if(scheduler->rr_qlen < 1){
+        if(my_scheduler->qlen() < 1){
             return NO_THREAD;
         }
 
@@ -234,7 +234,7 @@ tid_t lwp_wait(int* status){
 //installing a new scheduling function
 void lwp_set_scheduler(scheduler fun){
     //causes lwp to use given scheduler to choose next thread to run
-    if(fun != NULL && my_scheduler != &rr_publish) {
+    if(fun == NULL && my_scheduler != &rr_publish) {
         fun = &rr_publish;
     } else if(fun == NULL && my_scheduler == &rr_publish){
         return;
