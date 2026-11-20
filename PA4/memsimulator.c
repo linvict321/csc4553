@@ -27,12 +27,11 @@ typedef struct{ //TLB has to be fifo
     struct TLBEntry* next;
 }TLBEntry;
 
-//TODO: 16 entries
 typedef struct{ //linkedlist for fifo
     TLBEntry * front;
     TLBEntry * rear;    
     int current_size;
-    int max_capacity;
+    int max_capacity; //set this as 16
 }TLB;
 
 //bool TLBHIT = false; //false = miss, true = hit
@@ -62,13 +61,10 @@ void dequeue(TLB *t){
     if(t->front == NULL){
         t->rear = NULL;
     }
-
     t->current_size -= 1;
     free(temp);
 }
 
-
-//TODO: write a program that extracts the page number and offset
 int16_t get_pagenum(int32_t num){
     /*easiest way to do this is by using the operators for bit-masking and
     bit-shifting. Once you can correctly establish the page number and offset from an
@@ -94,8 +90,9 @@ int main(int argc, char * argv[]){
         return 1;
     }
     //default 256 and FIFO
-    int frames = 0;
-    char pra[]; //algo
+    int frames = 256;
+    char *pra; //algo
+    pra = "fifo";
     if(argc == 3){
         frames = atoi(argv[1]); //frame number
         if(frames <= 0 && frames > 256){
@@ -103,22 +100,19 @@ int main(int argc, char * argv[]){
             return 1;
         }
 
-        *pra = argv[2]; //check if its fifo, lru, opt
+        pra = argv[2]; //check if its fifo, lru, opt
         if(strcmp(pra, "fifo") == 0 || strcmp(pra, "opt") == 0 || strcmp(pra, "lru") == 0){
             printf("Not fifo, opt, or lru");
             return 1;
         }
-    } else{
-        frames = 256;
-        pra[] = "fifo";
-    }
+    } 
 
     int translated_addr = 0;
     int page_faults = 0;
-    int page_fault_rate = 0;
+    double page_fault_rate = page_faults/translated_addr; //TODO: it's page faults/memory references
     int TLB_hit = 0;
     int TLB_miss = 0;
-    int TLB_hitrate = TLB_hit/(TLB_hit + TLB_miss);
+    double TLB_hitrate = TLB_hit/(TLB_hit + TLB_miss);
 
     //create page table and page dir
     PageDir *pd = (*PageDir)malloc(sizeof(*pd));
@@ -154,29 +148,61 @@ int main(int argc, char * argv[]){
         int page_offset = get_pageoffset(address);
 
         //check if hit or miss on TLB
-        while(int i != 15)
+        int i = 0;
+        currtlb = tlb->front;
+        while(i < tlb->current_size)
         {
-            /* code */
+            //if hit, frame number becomes available*from TLB) and used to access memory
+            if(page_num == tlb->curr){
+                TLB_hit += 1;
+            }
+            //else miss, memory reference to page table must be made
+            else{
+                TLB_miss += 1;
+            }
+            i++;
         }
         
-
         PageTableEntry *pte = (*PageTableEntry)malloc(sizeof(*pte));
+
+        translated_addr += 1; 
     }
 
     //read from logical addresses, translate to physical using a TLB and page table
     //extract the page number from logical address
     //see if its a hit or miss on tlb
     //based on this, add or remove from the page table
-    //if not in page table, we have to do a 256 byte page recall from BackingStore.bin 
-    //treat backingstore as a random access table, use fopen, fread, fseek, fclose
 
+
+    //if not in page table, we have to do a 256 byte page recall from BackingStore.bin 
+    //diff page replacement algos
+
+    //treat backingstore as a random access table, use fopen, fread, fseek, fclose
+    FILE *bin = fopen("BACKING_STORE.bin", "r");
+    if(bin == NULL){
+        printf("Couldn't open BACKING_STORE.bin file");
+        return 1;
+    }
+
+    if(strcmp(pra, "fifo")){
+        //replace oldest page w/ counter? or create a queue.h w/ queue.c files
+        
+    } else if(strcmp(pra, "opt")){
+        //TODO: Do we have to do this one??
+    } else if(strcmp(pra, "lru")){
+        //replace the one that was least recently ues (implement stack)
+    }
+
+    //fseek based on frame number
+    //then fread it to be the current page table
     //store in page frame, update page table and TLB
 
+    fclose(bin);
     fclose(fp);
     free(pd);
     free(pt);
     free(tlb);
-    
+
     printf("Number of Translated Addresses = %d", translated_addr);
     printf("Page Faults = %d", page_faults);
     printf("Page Fault Rate = %d", page_fault_rate);
