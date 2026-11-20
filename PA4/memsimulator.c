@@ -20,6 +20,8 @@ typedef struct{
     PageTable *tables[PAGE_SIZE];
 }PageDir;
 
+
+//TODO: I actually don't know if we need a TLB Entry or if I can just add it straight into the TLB
 //An entry in the TLB consist of a logical memory page number and its corresponding physical memory frame number, 16 entry TLB 
 typedef struct{ //TLB has to be fifo
     int page_num[PAGE_SIZE]; //key
@@ -34,7 +36,7 @@ typedef struct{ //linkedlist for fifo
     int max_capacity; //set this as 16
 }TLB;
 
-//bool TLBHIT = false; //false = miss, true = hit
+bool TLBHIT = false; //false = miss, true = hit
 
 void enqueue_TLB(TLB *t, int page_num, int frame_num){
     TLBEntry *newT = (TLBEntry *)malloc(sizeof(TLBEntry));
@@ -144,29 +146,40 @@ int main(int argc, char * argv[]){
             printf("Invalid address");
             return 1;
         }
-        int page_num = get_pagenum(address);
-        int page_offset = get_pageoffset(address);
 
-        //check if hit or miss on TLB
-        int i = 0;
-        currtlb = tlb->front;
-        while(i < tlb->current_size)
-        {
-            //if hit, frame number becomes available*from TLB) and used to access memory
-            if(page_num == tlb->curr){
-                TLB_hit += 1;
-            }
-            //else miss, memory reference to page table must be made
-            else{
-                TLB_miss += 1;
-            }
-            i++;
-        }
-        
-        PageTableEntry *pte = (*PageTableEntry)malloc(sizeof(*pte));
+        //TODO: save page_num and page_offset somewhere maybe in a list and then run it thorugh the TLB hit/miss
+        //idk if that would be the right implementation or to just directly implement the TLB hit or miss w/in this read loop directly
+        int page_num = get_pagenum(address); 
+        int page_offset = get_pageoffset(address); //offset is the same in the physical address
 
         translated_addr += 1; 
     }
+
+    //check if hit or miss on TLB
+    int i = 0;
+    currtlb = tlb->front;
+    while(i < tlb->current_size)
+    {
+        //if hit, frame number becomes available*from TLB) and used to access memory
+        if(page_num == tlb->curr){
+            TLB_hit += 1;
+        }            
+        i++;
+    }
+    //else miss, memory reference to page table must be made
+    if(!TLBHIT){
+        TLB_miss += 1;
+        //reference to page table
+
+        //add entry to tlb
+        TLBEntry *tlbe = (*TLBEntry)malloc(sizeof(*tlbe));
+        TLBEntry temp = tlb->rear;
+        //TODO: fill in all the blanks
+
+        PageTableEntry *pte = (*PageTableEntry)malloc(sizeof(*pte));
+    }
+
+    PageTableEntry *pte = (*PageTableEntry)malloc(sizeof(*pte));
 
     //read from logical addresses, translate to physical using a TLB and page table
     //extract the page number from logical address
