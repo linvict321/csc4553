@@ -2,22 +2,34 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdboolh>
 #define _POSIX_C_SOURCE 200809L
 
 
 #define PAGE_ENTRIES 256
 #define PAGE_SIZE 256
 #define NUM_TLB_ENTRIES 256
-
-/*typedef struct{
+*typedef struct{
     int frame_number;
-    int valid_invalid_bit; //0 = val, 1 = invalid
+    bool valid;
+    bool dirty; //1 = modified, 0 = unmodified
+
+
 }PageTable;
-*/
+
+//An entry in the TLB consist of a logical memory page number and its corresponding physical memory frame number, 16 entry TLB 
 typedef struct{
-    int page_num[NUM_TLB_ENTRIES]; //key
-    int frame_num[NUM_TLB_ENTRIES]; //val
+    int page_num[16]; //key
+    int frame_num[16]; //val
 } TLB;
+bool TLBHIT = false; //false = miss, true = hit
+
+//TODO: write a program that extracts the page number and offset
+void extract(void){
+    /*easiest way to do this is by using the operators for bit-masking and
+    bit-shifting. Once you can correctly establish the page number and offset from an
+    integer number, you are ready to begin*/
+}
 
 int main(int argc, char * argv[]){
 
@@ -34,7 +46,7 @@ int main(int argc, char * argv[]){
     }
     //default 256 and FIFO
     int frames = 0;
-    char pra[];
+    char pra[]; //algo
     if(argc == 3){
         frames = atoi(argv[1]); //frame number
         if(frames <= 0 && frames > 256){
@@ -67,6 +79,17 @@ int main(int argc, char * argv[]){
     while((read = getline(&buf, &len, fp)) != -1)}{
 
     }
+
+
+    //read from logical addresses, translate to physical using a TLB and page table
+    //extract the page number from logical address
+    //see if its a hit or miss on tlb
+    //based on this, add or remove from the page table
+    //if not in page table, we have to do a 256 byte page recall from BackingStore.bin 
+    //treat backingstore as a random access table, use fopen, fread, fseek, fclose
+
+    //store in page frame, update page table and TLB
+
 
     fclose(fp);
 
