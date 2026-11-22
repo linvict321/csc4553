@@ -2,24 +2,20 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdboolh>
+#include <stdbool.h>
 #define _POSIX_C_SOURCE 200809L
 
 #define PAGE_ENTRIES 256
 #define PAGE_SIZE 256
 #define NUM_TLB_ENTRIES 16
+#define MAX_FRAMES 256
 typedef struct{
     int frame_number;
     bool valid; //valid/invalid bit
-    bool dirty; //1 = modified, 0 = unmodified
 }PageTableEntry;
 typedef struct{
     PageTableEntry entries[PAGE_ENTRIES];
 }PageTable;
-typedef struct{
-    PageTable *tables[PAGE_SIZE];
-}PageDir;
-
 
 //TODO: I actually don't know if we need a TLB Entry or if I can just add it straight into the TLB
 //An entry in the TLB consist of a logical memory page number and its corresponding physical memory frame number, 16 entry TLB 
@@ -36,7 +32,21 @@ typedef struct{ //linkedlist for fifo
     int max_capacity; //set this as 16
 }TLB;
 
+typedef struct{
+    char *data; 
+    int num_frames;
+    int num_used; //num of frames used
+    int frame_page[MAX_FRAMES];
+    int last_used[MAX_FRAMES]; //lru purposes
+    int fifo_next;
+
+}PhysMem;
+
 bool TLBHIT = false; //false = miss, true = hit
+
+void tlb_create(TLB *t){
+    memset(t, 0, sizeof(t));
+}
 
 void enqueue_TLB(TLB *t, int page_num, int frame_num){
     TLBEntry *newT = (TLBEntry *)malloc(sizeof(TLBEntry));
@@ -67,15 +77,15 @@ void dequeue(TLB *t){
     free(temp);
 }
 
-int16_t get_pagenum(int32_t num){
+int get_pagenum(int32_t num){
     /*easiest way to do this is by using the operators for bit-masking and
     bit-shifting. Once you can correctly establish the page number and offset from an
     integer number, you are ready to begin*/
-    int16_t page_num = (num >> 8) & 0xFF; // 8-15 bits
+    int page_num = (num >> 8) & 0xFF; // 8-15 bits
     return page_num;
 }
-int16_t get_pageoffset(int32_t num){
-    int16_t offset = num & 0xFF; //last 8 bits
+int get_pageoffset(int32_t num){
+    int offset = num & 0xFF; //last 8 bits
     return offset;
 }
 
@@ -86,7 +96,7 @@ int main(int argc, char * argv[]){
     }
 
     //open addresses.txt
-    FILE *fp = fopen(argv[0], "r");
+    FILE *fp = fopen(argv[1], "rb");
     if(fp == NULL){
         printf("File cannot be opened");
         return 1;
@@ -95,19 +105,36 @@ int main(int argc, char * argv[]){
     int frames = 256;
     char *pra; //algo
     pra = "fifo";
-    if(argc == 3){
-        frames = atoi(argv[1]); //frame number
+
+    //create physical mem
+    PhysMem *pm = (*PhysMem)malloc(sizeof(*pm));
+    if(!pm){
+        printf("Physical Memory failed");
+        return NULL;
+    }
+
+    if(argc == 4){
+        frames = atoi(argv[2]); //frame number
         if(frames <= 0 && frames > 256){
             printf("Frame number not betweeen 0 to 256");
             return 1;
         }
 
-        pra = argv[2]; //check if its fifo, lru, opt
-        if(strcmp(pra, "fifo") == 0 || strcmp(pra, "opt") == 0 || strcmp(pra, "lru") == 0){
+        pra = argv[3]; //check if its fifo, lru, opt
+        if(strcmp(pra, "fifo") != 0 || strcmp(pra, "opt") != 0 || strcmp(pra, "lru") != 0){
             printf("Not fifo, opt, or lru");
             return 1;
         }
     } 
+    pm->num_frames = frames;
+
+    //treat backingstore as a random access table, use fopen, fread, fseek, fclose
+    FILE *bin = fopen("BACKING_STORE.bin", "r");
+    if(bin == NULL){
+        printf("Couldn't open BACKING_STORE.bin file");
+        fclose(bin);
+        return 1;
+    }
 
     int translated_addr = 0;
     int page_faults = 0;
@@ -116,12 +143,7 @@ int main(int argc, char * argv[]){
     int TLB_miss = 0;
     double TLB_hitrate = TLB_hit/(TLB_hit + TLB_miss);
 
-    //create page table and page dir
-    PageDir *pd = (*PageDir)malloc(sizeof(*pd));
-    if(!pd){
-        printf("Page Directory failed");
-        return NULL;
-    }
+    //create page table 
     PageTable *pt = (*PageTable)malloc(sizeof(*pt));
     if(!pt){
         printf("Page table failed");
@@ -139,7 +161,16 @@ int main(int argc, char * argv[]){
     char *buf = NULL;
     size_t len = 0;
     ssize_t read;
-    while((read = getline(&buf, &len, fp)) != -1)}{
+
+    int arr_cap = 128;
+    int arr_count = 0;
+    int *arr = malloc(sizeof(int) * arr_cap);
+    if(!arr){
+        printf("array failed");
+        return 1;
+    }
+
+    while((read = getline(&buf, &len, fp)) != -1){
         //extract the buffer and put it into the extraction function
         int address = atoi(buf);
         if(!address){
@@ -148,39 +179,70 @@ int main(int argc, char * argv[]){
         }
 
         //TODO: save page_num and page_offset somewhere maybe in a list and then run it thorugh the TLB hit/miss
-        //idk if that would be the right implementation or to just directly implement the TLB hit or miss w/in this read loop directly
-        int page_num = get_pagenum(address); 
-        int page_offset = get_pageoffset(address); //offset is the same in the physical address
-
+        //idk if that would be the right implementation or to just directly implement the TLB hit or miss w/in this read loop directly     
+        if(arr_cap == arr_count){
+            arr_cap *= 2;
+            int *temp = realloc(arr, arr_cap * sizeof(int));
+            if(!temp){
+                free(arr);
+                return 1;
+            }
+            arr = temp;
+        }
+        arr[count++] = address
         translated_addr += 1; 
     }
 
-    //check if hit or miss on TLB
-    int i = 0;
-    currtlb = tlb->front;
-    while(i < tlb->current_size)
-    {
-        //if hit, frame number becomes available*from TLB) and used to access memory
-        if(page_num == tlb->curr){
-            TLB_hit += 1;
-        }            
-        i++;
+    for(int i = 0; i < count; i++){
+        int page_num = get_pagenum(address); 
+        int page_offset = get_pageoffset(address); //offset is the same in the physical address
+        //check if hit or miss on TLB
+        int i = 0;
+        curr_entry = tlb->front;
+        while(i < tlb->current_size)
+        {
+            //if hit, frame number becomes available*from TLB) and used to access memory
+            if(page_num == curr_entry->page_num){
+                TLB_hit += 1;
+                TLBHIT = true;
+                //get page frame and place into memory
+                pm->last_used = page_num;
+                pm->num_frames = curr_entry->frame_num;
+                //place @ addr = frame # + offset #
+            }            
+            i++;
+            curr_entry = curr_entry->next
+        }
+        //else miss, memory reference to page table must be made
+        if(!TLBHIT){
+            TLB_miss += 1;
+            //reference to page table
+
+            //add entry to tlb
+            TLBEntry *tlbe = (*TLBEntry)malloc(sizeof(*tlbe));
+            if(!tlbe){
+                printf("TLBE failed");
+                return 1; 
+            }
+            tlbe->page_num = page_num;
+            
+            //find frame num in page table, add to TLB useF FIFO
+            bool found = false
+            for(int i = 0; i < PAGE_ENTRIES; i++){
+                if(pt->entries->page_num == page_num){
+                    found = true;
+                    pt->entries.append()
+                }
+            }
+
+            //if not found, there's a page fault and we need to check the .bin file
+            if(!found){
+
+            }
+
+        }
+
     }
-    //else miss, memory reference to page table must be made
-    if(!TLBHIT){
-        TLB_miss += 1;
-        //reference to page table
-
-        //add entry to tlb
-        TLBEntry *tlbe = (*TLBEntry)malloc(sizeof(*tlbe));
-        TLBEntry temp = tlb->rear;
-        //TODO: fill in all the blanks
-
-        PageTableEntry *pte = (*PageTableEntry)malloc(sizeof(*pte));
-    }
-
-    PageTableEntry *pte = (*PageTableEntry)malloc(sizeof(*pte));
-
     //read from logical addresses, translate to physical using a TLB and page table
     //extract the page number from logical address
     //see if its a hit or miss on tlb
@@ -190,19 +252,14 @@ int main(int argc, char * argv[]){
     //if not in page table, we have to do a 256 byte page recall from BackingStore.bin 
     //diff page replacement algos
 
-    //treat backingstore as a random access table, use fopen, fread, fseek, fclose
-    FILE *bin = fopen("BACKING_STORE.bin", "r");
-    if(bin == NULL){
-        printf("Couldn't open BACKING_STORE.bin file");
-        return 1;
-    }
+    
 
-    if(strcmp(pra, "fifo")){
+    if(strcmp(pra, "fifo") == 0){
         //replace oldest page w/ counter? or create a queue.h w/ queue.c files
         
-    } else if(strcmp(pra, "opt")){
+    } else if(strcmp(pra, "opt") == 0){
         //TODO: Do we have to do this one??
-    } else if(strcmp(pra, "lru")){
+    } else if(strcmp(pra, "lru") == 0){
         //replace the one that was least recently ues (implement stack)
     }
 
@@ -215,6 +272,13 @@ int main(int argc, char * argv[]){
     free(pd);
     free(pt);
     free(tlb);
+
+    /*1. The logical address being translated (the integer value being read from addresses.txt).
+    2. The corresponding physical address (what your program translates the logical address to).
+    2.5 the index of the logical address
+    3. The signed byte value stored in physical memory at the translated physical address.
+    
+    in x, y, z, w format*/
 
     printf("Number of Translated Addresses = %d", translated_addr);
     printf("Page Faults = %d", page_faults);
