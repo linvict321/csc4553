@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <sys/types.h>
 #define _POSIX_C_SOURCE 200809L
 
 #define PAGE_ENTRIES 256
@@ -203,7 +205,7 @@ int main(int argc, char * argv[]){
             }
             arr = temp;
         }
-        arr[count++] = (int)address
+        arr[count++] = (int)address;
         translated_addr += 1; 
     }
     free(buf);
@@ -302,7 +304,7 @@ int main(int argc, char * argv[]){
                     pt->entries[page_num].valid = true;
                 }
                 //add to tlb
-                enqueue_TLB(tlb, page_num, frame)
+                enqueue_TLB(tlb, page_num, frame);
             }
             pm->last_used[frame] = i; //to keep track of lru
             
@@ -337,15 +339,14 @@ int main(int argc, char * argv[]){
     free(arr);
     free(pm->data);
     free(pm);
-    free(pd);
     free(pt);
     free(tlb);
     
     printf("Number of Translated Addresses = %d", translated_addr);
     printf("Page Faults = %d", page_faults);
-    printf("Page Fault Rate = %d", page_fault_rate);
+    printf("Page Fault Rate = %f", page_fault_rate);
     printf("TLB Hits = %d", TLB_hit);
     printf("TLB Misses = %d", TLB_miss);
-    printf("TLB Hit Rate = %d", TLB_hitrate);
+    printf("TLB Hit Rate = %f", TLB_hitrate);
     return 0;
 }
