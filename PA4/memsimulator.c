@@ -251,6 +251,23 @@ int main(int argc, char * argv[]){
                         pm->fifo_next = (pm->fifo_next + 1) % pm->num_frames;
                     } else if(strcmp(pra, "opt") == 0){
                         //opt algorithm
+                        //look at all the future addresses and see which ever comes last
+                        int farthest = -1;
+                        int victim = 0;
+                        for(int k = 0; k < pm->num_frames; k++){
+                            int next_used = arr_count; //max num
+                            for(int l = i + 1; l < arr_count; l++){
+                                if(get_pagenum(arr[j]) == pm->frame_page[k]){
+                                    next_used = l;
+                                    break;
+                                }
+                            }
+                            if(next_used > farthest){
+                                farthest = next_used;
+                                victim = k;
+                            }
+                        }
+                        frame = victim;
                     } else if(strcmp(pra, "lru") == 0){
                         //replace the one that was least recently ues (implement stack)
                         frame = 0; 
