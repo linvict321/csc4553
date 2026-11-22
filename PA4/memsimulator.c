@@ -22,7 +22,7 @@ typedef struct{
 //TODO: I actually don't know if we need a TLB Entry or if I can just add it straight into the TLB
 //An entry in the TLB consist of a logical memory page number and its corresponding physical memory frame number, 16 entry TLB 
 typedef struct{ //TLB has to be fifo
-    int page_num[PAGE_SIZE]; //key
+    int page_num; //key
     int frame_num; //val
     bool valid; 
     struct TLBEntry* next;
@@ -53,6 +53,19 @@ void tlb_create(TLB *t){
     t->max_capacity = NUM_TLB_ENTRIES;
 }
 
+void dequeue(TLB *t){
+    if(t->front == NULL){
+        printf("Queue Empty");
+        return;
+    }
+    TLBEntry *temp = t->front;
+    t->front = t->front->next;
+    if(t->front == NULL){
+        t->rear = NULL;
+    }
+    t->current_size -= 1;
+    free(temp);
+}
 void enqueue_TLB(TLB *t, int page_num, int frame_num){
     if(t->current_size == t->max_capacity){
         dequeue(t);
@@ -60,7 +73,7 @@ void enqueue_TLB(TLB *t, int page_num, int frame_num){
     TLBEntry *newT = (TLBEntry *)malloc(sizeof(TLBEntry));
     if(!newT){
         printf("Queue overflow\n");
-        return 1;
+        exit(1);
     }
     newT->page_num = page_num;
     newT->frame_num = frame_num;
@@ -75,19 +88,6 @@ void enqueue_TLB(TLB *t, int page_num, int frame_num){
         t->rear = newT;
     }
     t->current_size += 1;
-}
-void dequeue(TLB *t){
-    if(t->front == NULL){
-        printf("Queue Empty");
-        return;
-    }
-    TLBEntry *temp = t->front;
-    t->front = t->front->next;
-    if(t->front == NULL){
-        t->rear = NULL;
-    }
-    t->current_size -= 1;
-    free(temp);
 }
 
 /*easiest way to do this is by using the operators for bit-masking and bit-shifting. 
@@ -119,7 +119,7 @@ int main(int argc, char * argv[]){
     pra = "fifo";
 
     //create physical mem
-    PhysMem *pm = (*PhysMem)calloc(1, sizeof(*pm));
+    PhysMem *pm = (PhysMem *)calloc(1, sizeof(*pm));
     if(!pm){
         printf("Physical Memory failed");
         return NULL;
@@ -158,15 +158,15 @@ int main(int argc, char * argv[]){
     int TLB_miss = 0;
 
     //create page table 
-    PageTable *pt = (*PageTable)calloc(1, sizeof(*pt));
+    PageTable *pt = (PageTable *)calloc(1, sizeof(*pt));
     if(!pt){
         printf("Page table failed");
-        return NULL;
+        return 1;
     }
-    TLB *tlb = (*TLB)malloc(sizeof(*tlb));
+    TLB *tlb = (TLB *)malloc(sizeof(*tlb));
     if(!tlb){
         printf("TLB failed");
-        return NULL;
+        return 1;
     }
     tlb_create(tlb);
 
@@ -187,9 +187,9 @@ int main(int argc, char * argv[]){
         //extract the buffer and put it into the extraction function
         char *endptr;
         char *b = buf;
-        long address = strol(buf, &endptr, 10);
+        long address = strtol(buf, &endptr, 10);
       
-        if(end == b || *end != '\0'){
+        if(endptr == b || *endptr != '\0'){
             printf("Invalid address");
             return 1;
         }
@@ -205,22 +205,22 @@ int main(int argc, char * argv[]){
             }
             arr = temp;
         }
-        arr[count++] = (int)address;
+        arr[arr_count++] = (int)address;
         translated_addr += 1; 
     }
     free(buf);
     fclose(fp);
 
-    for(int i = 0; i < count; i++){
+    for(int i = 0; i < arr_count; i++){
         int address = arr[i];
         int page_num = get_pagenum(address); 
         int page_offset = get_pageoffset(address); //offset is the same in the physical address
-        int frame -= 1;
+        int frame = -1;
         TLBHIT = false;
        
         //find the frame entry + check if hit or miss on TLB
-        TLBEntry *curr_entry = t->front;
-        while(curr_entry != null){
+        TLBEntry *curr_entry = tlb->front;
+        while(curr_entry != NULL){
             if(curr_entry->valid && curr_entry->page_num == page_num){
                 frame = curr_entry->frame_num;
             }
@@ -259,7 +259,7 @@ int main(int argc, char * argv[]){
                         for(int k = 0; k < pm->num_frames; k++){
                             int next_used = arr_count; //max num
                             for(int l = i + 1; l < arr_count; l++){
-                                if(get_pagenum(arr[j]) == pm->frame_page[k]){
+                                if(get_pagenum(arr[k]) == pm->frame_page[k]){
                                     next_used = l;
                                     break;
                                 }
