@@ -345,7 +345,7 @@ int main(int argc, char * argv[]){
     
     printf("Number of Translated Addresses = %d\n", translated_addr);
     printf("Page Faults = %d\n", page_faults);
-    printf("Page Fault Rate = .%.3f\n", page_fault_rate);
+    printf("Page Fault Rate = %.3f\n", page_fault_rate);
     printf("TLB Hits = %d\n", TLB_hit);
     printf("TLB Misses = %d\n", TLB_miss);
     printf("TLB Hit Rate = %.3f\n", TLB_hitrate);
