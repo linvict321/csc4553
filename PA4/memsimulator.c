@@ -21,11 +21,11 @@ typedef struct{
 
 //TODO: I actually don't know if we need a TLB Entry or if I can just add it straight into the TLB
 //An entry in the TLB consist of a logical memory page number and its corresponding physical memory frame number, 16 entry TLB 
-typedef struct{ //TLB has to be fifo
+typedef struct TLBEntry{ //TLB has to be fifo
     int page_num; //key
     int frame_num; //val
     bool valid; 
-    struct TLBEntry* next;
+    struct TLBEntry *next;
 }TLBEntry;
 
 typedef struct{ //linkedlist for fifo
@@ -102,7 +102,7 @@ int get_pageoffset(int32_t num){
 }
 
 int main(int argc, char * argv[]){
-    if(argc <= 2 || argc > 4){
+    if(argc < 2 || argc > 4){
         printf("WRONG input statement");
         return 1;
     }
@@ -122,7 +122,7 @@ int main(int argc, char * argv[]){
     PhysMem *pm = (PhysMem *)calloc(1, sizeof(*pm));
     if(!pm){
         printf("Physical Memory failed");
-        return NULL;
+        return 1;
     }
 
     if(argc >= 3){
@@ -187,12 +187,12 @@ int main(int argc, char * argv[]){
         //extract the buffer and put it into the extraction function
         char *endptr;
         char *b = buf;
-        long address = strtol(buf, &endptr, 10);
+        long address = strtol(b, &endptr, 10);
       
-        if(endptr == b || *endptr != '\0'){
+        /*if(endptr == b || *endptr != '\0'){
             printf("Invalid address");
             return 1;
-        }
+        }*/
 
         //TODO: save page_num and page_offset somewhere maybe in a list and then run it thorugh the TLB hit/miss
         //idk if that would be the right implementation or to just directly implement the TLB hit or miss w/in this read loop directly     
@@ -281,7 +281,7 @@ int main(int argc, char * argv[]){
                         //remove old page from mem
                         int old_page = pm->frame_page[frame];
                         pt->entries[old_page].valid = false;
-                        TLBEntry *curr_entry = t->front;
+                        TLBEntry *curr_entry = tlb->front;
                         while(curr_entry != NULL){
                             if(curr_entry->valid && curr_entry->page_num == old_page){
                                 curr_entry->valid = false;
@@ -342,11 +342,11 @@ int main(int argc, char * argv[]){
     free(pt);
     free(tlb);
     
-    printf("Number of Translated Addresses = %d", translated_addr);
-    printf("Page Faults = %d", page_faults);
-    printf("Page Fault Rate = %f", page_fault_rate);
-    printf("TLB Hits = %d", TLB_hit);
-    printf("TLB Misses = %d", TLB_miss);
-    printf("TLB Hit Rate = %f", TLB_hitrate);
+    printf("Number of Translated Addresses = %d\n", translated_addr);
+    printf("Page Faults = %d\n", page_faults);
+    printf("Page Fault Rate = %f\n", page_fault_rate);
+    printf("TLB Hits = %d\n", TLB_hit);
+    printf("TLB Misses = %d\n", TLB_miss);
+    printf("TLB Hit Rate = %f\n", TLB_hitrate);
     return 0;
 }
