@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -5,7 +6,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
-#define _POSIX_C_SOURCE 200809L
 
 #define PAGE_ENTRIES 256
 #define PAGE_SIZE 256
@@ -82,7 +82,6 @@ void enqueue_TLB(TLB *t, int page_num, int frame_num){
     //queue empty
     if(t->rear == NULL){
         t->front = t->rear = newT;
-        return;
     } else{
         t->rear->next = newT;
         t->rear = newT;
@@ -131,9 +130,10 @@ int main(int argc, char * argv[]){
             printf("Frame number not betweeen 0 to 256");
             return 1;
         }
-    } if( argc == 4){
+    } 
+    if( argc == 4){
         pra = argv[3]; //check if its fifo, lru, opt
-        if(strcmp(pra, "fifo") != 0 || strcmp(pra, "opt") != 0 || strcmp(pra, "lru") != 0){
+        if(strcmp(pra, "fifo") != 0 && strcmp(pra, "opt") != 0 && strcmp(pra, "lru") != 0){
             printf("Not fifo, opt, or lru");
             return 1;
         }
@@ -148,7 +148,6 @@ int main(int argc, char * argv[]){
     FILE *bin = fopen("BACKING_STORE.bin", "r");
     if(bin == NULL){
         printf("Couldn't open BACKING_STORE.bin file");
-        fclose(bin);
         return 1;
     }
 
@@ -259,7 +258,7 @@ int main(int argc, char * argv[]){
                         for(int k = 0; k < pm->num_frames; k++){
                             int next_used = arr_count; //max num
                             for(int l = i + 1; l < arr_count; l++){
-                                if(get_pagenum(arr[k]) == pm->frame_page[k]){
+                                if(get_pagenum(arr[l]) == pm->frame_page[k]){
                                     next_used = l;
                                     break;
                                 }
@@ -278,51 +277,53 @@ int main(int argc, char * argv[]){
                                 frame = f;
                             }
                         }
-                        //remove old page from mem
-                        int old_page = pm->frame_page[frame];
-                        pt->entries[old_page].valid = false;
-                        TLBEntry *curr_entry = tlb->front;
-                        while(curr_entry != NULL){
-                            if(curr_entry->valid && curr_entry->page_num == old_page){
-                                curr_entry->valid = false;
-                            }
-                            curr_entry = curr_entry->next;
+                    }
+                    //remove old page from mem
+                    int old_page = pm->frame_page[frame];
+                    pt->entries[old_page].valid = false;
+                    TLBEntry *old_entry = tlb->front;
+                    while(old_entry != NULL){
+                        if(old_entry->valid && old_entry->page_num == old_page){
+                            old_entry->valid = false;
                         }
-                    }
-                    //fseek based on frame number
-                    //then fread it to be the current page table
-                    //store in page frame, update page table and TLB
-                    if(fseek(bin, (long)page_num*PAGE_SIZE, SEEK_SET) != 0
-                       || fread(pm->data + frame*PAGE_SIZE, 1, PAGE_SIZE, bin) != PAGE_SIZE){
-                        printf("can't read page from .bin file");
-                        return 1; 
-                    }
-
-                    //put into page table
-                    pm->frame_page[frame] = page_num;
-                    pt->entries[page_num].frame_number = frame;
-                    pt->entries[page_num].valid = true;
+                        old_entry = old_entry->next;
+                    }                    
                 }
-                //add to tlb
-                enqueue_TLB(tlb, page_num, frame);
-            }
-            pm->last_used[frame] = i; //to keep track of lru
-            
-            //addr = frame# * pagesize + offset#
-            int physaddr = frame*PAGE_SIZE + page_offset;
-            signed char val = (signed char)pm->data[physaddr];
+                //fseek based on frame number
+                //then fread it to be the current page table
+                //store in page frame, update page table and TLB
+                if(fseek(bin, (long)page_num*PAGE_SIZE, SEEK_SET) != 0
+                    || fread(pm->data + frame*PAGE_SIZE, 1, PAGE_SIZE, bin) != PAGE_SIZE){
+                    printf("can't read page from .bin file");
+                    return 1; 
+                }
 
-            /*1. The logical address being translated (the integer value being read from addresses.txt).
-            2. The corresponding physical address (what your program translates the logical address to).
-            2.5 the index of the logical address
-            3. The signed byte value stored in physical memory at the translated physical address.
-            in x, y, z, w format*/
-            printf("%d, %d, %d, ", address, val, i);
-            for(int j = 0; j < PAGE_SIZE; j++){
-                printf("%02X", pm->data[frame*PAGE_SIZE + j]);
+                //put into page table
+                pm->frame_page[frame] = page_num;
+                pt->entries[page_num].frame_number = frame;
+                pt->entries[page_num].valid = true;
             }
-            printf("\n");
+                //add to tlb
+            enqueue_TLB(tlb, page_num, frame);
+
         }
+        pm->last_used[frame] = i; //to keep track of lru
+        
+        //addr = frame# * pagesize + offset#
+        int physaddr = frame*PAGE_SIZE + page_offset;
+        signed char val = (signed char)pm->data[physaddr];
+
+        /*1. The logical address being translated (the integer value being read from addresses.txt).
+        2. The corresponding physical address (what your program translates the logical address to).
+        2.5 the index of the logical address
+        3. The signed byte value stored in physical memory at the translated physical address.
+        in x, y, z, w format*/
+        printf("%d, %d, %d, ", address, val, i);
+        for(int j = 0; j < PAGE_SIZE; j++){
+            printf("%02X", pm->data[frame*PAGE_SIZE + j]);
+        }
+            printf("\n");
+
     }
 
     double TLB_hitrate = 0.0;
@@ -344,9 +345,9 @@ int main(int argc, char * argv[]){
     
     printf("Number of Translated Addresses = %d\n", translated_addr);
     printf("Page Faults = %d\n", page_faults);
-    printf("Page Fault Rate = %f\n", page_fault_rate);
+    printf("Page Fault Rate = .%.3f\n", page_fault_rate);
     printf("TLB Hits = %d\n", TLB_hit);
     printf("TLB Misses = %d\n", TLB_miss);
-    printf("TLB Hit Rate = %f\n", TLB_hitrate);
+    printf("TLB Hit Rate = %.3f\n", TLB_hitrate);
     return 0;
 }
